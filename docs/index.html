@@ -525,7 +525,7 @@ const FONT = 'Arimo, Arial, "Liberation Sans", Helvetica, sans-serif';
 const NAME_FONT = 'Carlito, Calibri, Arial, sans-serif';
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAN_LEVELS = ['1st Dan','2nd Dan','3rd Dan','4th Dan','5th Dan','6th Dan','7th Dan','8th Dan','9th Dan'];
-const PHOTO = { x: 157.2 * K, y: 22.7 * K, w: 82.2 * K, h: 110.4 * K };
+const PHOTO = { x: 155.7 * K,   /* centred under the dan banner */ y: 22.7 * K, w: 82.2 * K, h: 110.4 * K };
 const STATION_ONLINE_MS = 45 * 1000;      // the print station checks in every 15 seconds
 const WAITING = ['pending', 'approved', 'printing', 'failed'];
 const ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
@@ -693,7 +693,7 @@ function cropPhoto(file) {
       c.drawImage(img, ox, oy, img.width * scale, img.height * scale);
       if (withBanner && banner) {
         c.globalAlpha = 0.8;
-        c.drawImage(banner, (152.6 - 157.2) / 82.2 * CROP_W, (4.3 - 22.7) / 110.4 * CROP_H, 89.1 / 82.2 * CROP_W, 35.3 / 110.4 * CROP_H);
+        c.drawImage(banner, (152.6 - 155.7) / 82.2 * CROP_W, (4.3 - 22.7) / 110.4 * CROP_H, 89.1 / 82.2 * CROP_W, 35.3 / 110.4 * CROP_H);
         c.globalAlpha = 1;
       }
     };
