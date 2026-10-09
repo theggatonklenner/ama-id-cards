@@ -6,14 +6,21 @@
 --   photos    add people, edit their details and take photos (no printing or deleting)
 --   viewer    can look but not change anything
 --   printer   the laptop's print station account (prints jobs, reports its status)
+--   pending   has a login but no access yet (shown as "No access" in the app)
+--
+-- Logins created in Supabase (Authentication > Users) are picked up automatically and get the
+-- role chosen in the app under More > Users > "New logins from Supabase" (No access by default).
 --
 -- Everyone who can already sign in starts as an admin. Change roles in the app: More > Users.
 
 create table if not exists public.staff_roles (
   email      text primary key,
-  role       text not null check (role in ('admin', 'approver', 'photos', 'viewer', 'printer')),
+  role       text not null,
   created_at timestamptz not null default now()
 );
+alter table public.staff_roles drop constraint if exists staff_roles_role_check;
+alter table public.staff_roles add constraint staff_roles_role_check
+  check (role in ('admin', 'approver', 'photos', 'viewer', 'printer', 'pending'));
 insert into public.staff_roles (email, role)
   select lower(email), 'admin' from auth.users where email is not null
   on conflict (email) do nothing;
@@ -28,6 +35,37 @@ create or replace function public.has_role(variadic roles text[]) returns boolea
 
 grant execute on function public.my_role() to authenticated;
 grant execute on function public.has_role(text[]) to authenticated;
+
+-- Logins created directly in Supabase get a role automatically
+alter table public.settings add column if not exists default_new_role text not null default 'pending';
+create or replace function public.role_for_new_login() returns trigger
+  language plpgsql security definer set search_path = public
+as $$
+declare r text;
+begin
+  if new.email is null then return new; end if;
+  select coalesce(default_new_role, 'pending') into r from public.settings where id = 1;
+  if r is null or r not in ('approver', 'photos', 'viewer', 'pending') then r := 'pending'; end if;
+  insert into public.staff_roles (email, role) values (lower(new.email), r) on conflict (email) do nothing;
+  return new;
+end $$;
+drop trigger if exists auth_user_role on auth.users;
+create trigger auth_user_role after insert on auth.users
+  for each row execute function public.role_for_new_login();
+
+-- Removing a login in Supabase also removes it from the app's user list
+create or replace function public.forget_removed_login() returns trigger
+  language plpgsql security definer set search_path = public
+as $$
+begin
+  if old.email is not null then
+    delete from public.staff_roles where email = lower(old.email) and role <> 'admin';
+  end if;
+  return old;
+end $$;
+drop trigger if exists auth_user_forget on auth.users;
+create trigger auth_user_forget after delete on auth.users
+  for each row execute function public.forget_removed_login();
 
 -- Who can see and change roles
 alter table public.staff_roles enable row level security;

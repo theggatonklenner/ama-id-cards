@@ -416,6 +416,16 @@
       <div class="group-body">
         <p class="hint" id="rolesMissing" hidden style="color:var(--warn)">Roles aren't set up in the database yet. Run supabase/roles.sql in Supabase (SQL Editor), then reload.</p>
         <ul class="users" id="usersList"></ul>
+        <div class="field" id="defaultRoleRow" hidden>
+          <label for="defaultRole">New logins created in Supabase get</label>
+          <select id="defaultRole">
+            <option value="pending">No access (choose a role here later)</option>
+            <option value="viewer">Viewer</option>
+            <option value="photos">Photos</option>
+            <option value="approver">Approver</option>
+          </select>
+          <p class="hint">Logins you add in Supabase (Authentication &gt; Users) appear in this list automatically.</p>
+        </div>
         <form id="addUserForm" class="view" style="gap:10px">
           <h3>Add a user</h3>
           <div class="field"><label for="uEmail">Email</label><input type="email" id="uEmail" autocomplete="off" required></div>
@@ -1734,20 +1744,21 @@ $('#hiddenRestore').addEventListener('change', async e => {
 });
 
 /* ---------- Roles ---------- */
-const ROLE_NAMES = { admin: 'Admin', approver: 'Approver', photos: 'Photos', viewer: 'Viewer', printer: 'Print station' };
+const ROLE_NAMES = { admin: 'Admin', approver: 'Approver', photos: 'Photos', viewer: 'Viewer', printer: 'Print station', pending: 'No access' };
 const ROLE_CAN = {
   admin:    ['print', 'edit', 'delete', 'admin'],
   approver: ['print', 'edit', 'delete'],
   photos:   ['edit'],
   viewer:   [],
-  printer:  []
+  printer:  [],
+  pending:  []
 };
 function can(what) { return (ROLE_CAN[state.role] || []).includes(what); }
 function applyRole() {
   for (const c of ['print', 'edit', 'delete', 'admin']) document.body.classList.toggle('can-' + c, can(c));
   $('#tabbar').classList.toggle('three', !can('edit'));
   const tag = $('#myRoleTag'); tag.hidden = !state.role; tag.textContent = ROLE_NAMES[state.role] || '';
-  $('#uRole').innerHTML = Object.entries(ROLE_NAMES).map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+  $('#uRole').innerHTML = Object.entries(ROLE_NAMES).filter(([v]) => v !== 'pending').map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
   $('#uRole').value = 'photos';
 }
 async function loadMyRole() {
@@ -1764,6 +1775,11 @@ async function loadUsers() {
   if (!state.rolesReady) return;
   const { data, error } = await sb.from('staff_roles').select('*').order('email');
   if (error) { ul.innerHTML = `<li class="hint">${esc(errMsg(error))}</li>`; return; }
+  const { data: st } = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
+  const hasDefault = !!st && Object.prototype.hasOwnProperty.call(st, 'default_new_role');
+  $('#defaultRoleRow').hidden = !hasDefault;
+  if (hasDefault) $('#defaultRole').value = st.default_new_role || 'pending';
+  data.sort((a, b) => (a.role === 'pending') - (b.role === 'pending') || a.email.localeCompare(b.email));
   for (const u of data) {
     const li = document.createElement('li');
     const me = u.email === state.email.toLowerCase();
@@ -1797,6 +1813,10 @@ async function usersCall(body) {
   return out;
 }
 $('#usersGroup').addEventListener('toggle', e => { if (e.target.open) loadUsers(); });
+$('#defaultRole').addEventListener('change', async e => {
+  const { error } = await sb.from('settings').update({ default_new_role: e.target.value }).eq('id', 1);
+  toast(error ? 'Could not save: ' + errMsg(error) : 'Saved.');
+});
 $('#addUserForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#addUserBtn'); btn.disabled = true;
@@ -1832,7 +1852,7 @@ async function startApp(session) {
   state.email = session.user.email || '';
   $('#whoAmI').textContent = state.email;
   await loadMyRole();
-  if (!state.role || state.role === 'printer') {
+  if (!state.role || state.role === 'printer' || state.role === 'pending') {
     $('#noAccessEmail').textContent = state.email;
     showView('noaccess');
     return;

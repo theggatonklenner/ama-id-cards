@@ -95,7 +95,8 @@ Each person turns notifications on for their own phone. You're never notified ab
 1. In Supabase, open **SQL Editor > New query**, paste the whole of `supabase/roles.sql`, and click **Run**. Everyone who can already sign in becomes an Admin.
 2. Update the `notify` Edge Function with the latest `supabase/functions/notify/index.ts` (it adds and removes logins for you).
 3. In the app, go to **More > Users** and set the print station's login to **Print station**.
-4. Add new people from **More > Users > Add a user** with their email, role and a starting password. You no longer need to create logins in Supabase.
+4. Add new people from **More > Users > Add a user** with their email, role and a starting password.
+   You can still add logins in Supabase (**Authentication > Users > Add user**, tick **Auto Confirm User**). They appear in More > Users automatically with the role chosen under "New logins created in Supabase get" (No access unless you change it). Deleting a login in Supabase removes it from the list.
 
 There is always at least one Admin; the app won't let the last one be removed or downgraded.
 
