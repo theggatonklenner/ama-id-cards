@@ -370,6 +370,9 @@
           <p class="hint">Notifications are on for this device.</p>
           <label class="switch">Cards need approval <input type="checkbox" id="pushWantApprovals"></label>
           <label class="switch">A print fails <input type="checkbox" id="pushWantFailures"></label>
+          <label class="switch" id="pushPrintedRow">Cards are printed <input type="checkbox" id="pushWantPrinted"></label>
+          <label class="switch" id="pushStationRow">Printer goes offline or comes back <input type="checkbox" id="pushWantStation"></label>
+          <p class="hint" id="pushNeedsSql" hidden style="color:var(--warn)">To get printed and printer alerts, run supabase/notifications.sql again in Supabase.</p>
           <p class="hint">You won't be notified about cards you send yourself. Notifications never include members' details.</p>
           <div class="row"><button class="btn grow" id="pushTestBtn">Send a test</button><button class="btn danger grow" id="pushOffBtn">Turn off</button></div>
         </div>
@@ -1577,6 +1580,10 @@ async function renderPush() {
   pushRow = data;
   $('#pushWantApprovals').checked = !!data.wants_approvals;
   $('#pushWantFailures').checked = !!data.wants_failures;
+  const hasNew = Object.prototype.hasOwnProperty.call(data, 'wants_printed');
+  $('#pushPrintedRow').hidden = $('#pushStationRow').hidden = !hasNew;
+  $('#pushNeedsSql').hidden = hasNew;
+  if (hasNew) { $('#pushWantPrinted').checked = !!data.wants_printed; $('#pushWantStation').checked = !!data.wants_station; }
   showPush('pushOn');
 }
 $('#notifyGroup').addEventListener('toggle', e => { if (e.target.open) renderPush(); });
@@ -1608,12 +1615,17 @@ $('#pushOnBtn').onclick = async () => {
 async function savePushPrefs() {
   if (!pushRow) return;
   const { error } = await sb.from('push_subscriptions')
-    .update({ wants_approvals: $('#pushWantApprovals').checked, wants_failures: $('#pushWantFailures').checked })
+    .update({
+      wants_approvals: $('#pushWantApprovals').checked, wants_failures: $('#pushWantFailures').checked,
+      ...(Object.prototype.hasOwnProperty.call(pushRow, 'wants_printed') ? { wants_printed: $('#pushWantPrinted').checked, wants_station: $('#pushWantStation').checked } : {})
+    })
     .eq('endpoint', pushRow.endpoint);
   if (error) toast('Could not save: ' + errMsg(error), 6000);
 }
 $('#pushWantApprovals').addEventListener('change', savePushPrefs);
 $('#pushWantFailures').addEventListener('change', savePushPrefs);
+$('#pushWantPrinted').addEventListener('change', savePushPrefs);
+$('#pushWantStation').addEventListener('change', savePushPrefs);
 $('#pushTestBtn').onclick = async () => {
   try {
     const { data } = await sb.auth.getSession();

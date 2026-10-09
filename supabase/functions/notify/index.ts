@@ -148,6 +148,17 @@ Deno.serve(async req => {
     } else if (kind === 'failed') {
       message = { title: 'Print failed', body: `${cards} did not print. ${String(job.error || '').slice(0, 120)}`, tag: 'failed', url: './#queue' };
       column = 'wants_failures';
+    } else if (kind === 'printed') {
+      message = { title: 'Cards printed', body: `${cards} printed and ready to collect.`, tag: 'printed', url: './#queue' };
+      column = 'wants_printed';
+    } else if (kind === 'offline') {
+      const w = job.count || 0;
+      message = { title: 'Printer offline', body: `The print station has stopped. ${w} job${w === 1 ? '' : 's'} will print when it's back.`, tag: 'station', url: './#queue' };
+      column = 'wants_station';
+    } else if (kind === 'online') {
+      const w = job.count || 0;
+      message = { title: 'Printer back online', body: w ? `${w} job${w === 1 ? ' is' : 's are'} printing now.` : 'Ready to print.', tag: 'station', url: './#queue' };
+      column = 'wants_station';
     } else return json({ ignored: true });
 
     let { data: subs } = await db.from('push_subscriptions').select('*').eq(column, true);
