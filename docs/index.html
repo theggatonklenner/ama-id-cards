@@ -303,10 +303,10 @@
       </section>
 
       <section class="panel" id="panelPrinting">
-        <div class="panel-head"><h2>Printing</h2><span class="count" id="stationText"></span></div>
+        <div class="panel-head"><h2>Waiting to print <span class="pill" id="waitCount" hidden></span></h2><span class="count" id="stationText"></span></div>
         <label class="switch approval-toggle"><input type="checkbox" id="requireApproval"> Jobs need approval before they print</label>
         <div class="jobs" id="jobs"></div>
-        <div id="jobsEmpty" class="empty">No print jobs yet. Select people and click "Send selected to printer".</div>
+        <div id="jobsEmpty" class="empty">Nothing waiting to print.</div>
       </section>
 
       <section class="panel" id="panelPreview">
@@ -607,7 +607,10 @@ async function saveSettingsNow() {
 }
 
 async function loadJobs() {
-  const { data, error } = await sb.from('print_jobs').select('*').order('created_at', { ascending: false }).limit(15);
+  // Only jobs still waiting to print (failed ones stay so they can be retried)
+  const { data, error } = await sb.from('print_jobs').select('*')
+    .in('status', ['pending', 'approved', 'printing', 'failed'])
+    .order('created_at', { ascending: true }).limit(50);
   if (error) return;
   state.jobs = data || []; renderJobs();
 }
@@ -821,6 +824,8 @@ function summariseNames(names) {
 function renderJobs() {
   const box = $('#jobs'); box.innerHTML = '';
   $('#jobsEmpty').hidden = state.jobs.length > 0;
+  $('#waitCount').hidden = state.jobs.length === 0;
+  $('#waitCount').textContent = state.jobs.length;
   for (const j of state.jobs) {
     const [label, kind] = STATUS[j.status] || [j.status, ''];
     const div = document.createElement('div'); div.className = 'job';
@@ -828,8 +833,7 @@ function renderJobs() {
     let btns = '';
     if (j.status === 'pending') btns = '<button class="small primary" data-a="approve">Approve</button><button class="small danger" data-a="cancel">Cancel</button>';
     else if (j.status === 'approved') btns = '<button class="small danger" data-a="cancel">Cancel</button>';
-    else if (j.status === 'failed') btns = '<button class="small primary" data-a="retry">Try again</button><button class="small" data-a="pdf">Download PDF</button>';
-    else if (j.status === 'printed' || j.status === 'cancelled') btns = '<button class="small" data-a="retry">Print again</button><button class="small" data-a="pdf">Download PDF</button>';
+    else if (j.status === 'failed') btns = '<button class="small primary" data-a="retry">Try again</button><button class="small danger" data-a="cancel">Remove</button>';
     btns = '<button class="small" data-a="preview">Preview</button>' + btns;
     div.innerHTML = `
       <div class="who"><div class="names">${esc(summariseNames(j.people_names))}</div>
@@ -888,7 +892,9 @@ async function openJobPreview(j) {
 async function updateJob(j, patch) {
   const { error } = await sb.from('print_jobs').update(patch).eq('id', j.id);
   if (error) throw error;
-  Object.assign(j, patch); renderJobs();
+  Object.assign(j, patch);
+  state.jobs = state.jobs.filter(x => ['pending', 'approved', 'printing', 'failed'].includes(x.status));
+  renderJobs();
 }
 async function sendToPrinter(list) {
   if (!list.length) return toast('No one is selected.');
@@ -921,7 +927,7 @@ async function sendToPrinter(list) {
     };
     const { error } = await sb.from('print_jobs').insert(job);
     if (error) throw error;
-    toast(auto ? 'Sent to the printer.' : 'Sent. Approve it in Printing to start.', 5000);
+    toast(auto ? 'Sent to the printer.' : 'Sent. Approve it under Waiting to print.', 5000);
     loadJobs();
   } catch (err) { toast('Could not send to the printer: ' + errMsg(err), 7000); }
 }
