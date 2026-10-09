@@ -287,6 +287,7 @@
         <div class="toolbar">
           <input type="search" id="search" placeholder="Search by name" aria-label="Search by name">
           <select id="danFilter" aria-label="Filter by dan"><option value="">All dans</option></select>
+          <select id="photoFilter" aria-label="Filter by photo"><option value="">Any photo</option><option value="none">No photo</option><option value="has">Has photo</option></select>
           <button id="selectAllBtn">Select all shown</button>
           <button id="selectNoneBtn">Select none</button>
           <button id="deleteSelBtn" class="danger">Delete selected</button>
@@ -937,7 +938,11 @@ async function buildPdf(list, both, onBack) {
 function visiblePeople() {
   const q = $('#search').value.toLowerCase().trim();
   const dan = $('#danFilter').value;
-  return state.people.filter(p => (!q || String(p.name).toLowerCase().includes(q)) && (!dan || (p.dan || '') === dan));
+  const photo = $('#photoFilter').value;
+  const hasPhoto = p => !!(p.photo || localPhotos.has(p.id));
+  return state.people.filter(p => (!q || String(p.name).toLowerCase().includes(q))
+    && (!dan || (p.dan || '') === dan)
+    && (!photo || (photo === 'has' ? hasPhoto(p) : !hasPhoto(p))));
 }
 function renderDanFilter() {
   const sel = $('#danFilter'); const current = sel.value;
@@ -946,6 +951,10 @@ function renderDanFilter() {
   const opts = [['', `All dans (${state.people.length})`], ...[...DAN_LEVELS, ...extras].map(d => [d, `${d} (${counts[d] || 0})`])];
   sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
   sel.value = opts.some(([v]) => v === current) ? current : '';
+  const pf = $('#photoFilter'), pv = pf.value;
+  const withPhoto = state.people.filter(p => p.photo || localPhotos.has(p.id)).length;
+  pf.innerHTML = `<option value="">Any photo</option><option value="none">No photo (${state.people.length - withPhoto})</option><option value="has">Has photo (${withPhoto})</option>`;
+  pf.value = pv;
 }
 function renderList() {
   renderDanFilter();
@@ -1319,6 +1328,7 @@ $('#exportListBtn').onclick = () => {
 /* ---------- Selection, delete, export ---------- */
 $('#search').addEventListener('input', renderList);
 $('#danFilter').addEventListener('change', renderList);
+$('#photoFilter').addEventListener('change', renderList);
 $('#selectAllBtn').onclick = () => { visiblePeople().forEach(p => state.checked.add(p.id)); renderList(); };
 $('#selectNoneBtn').onclick = () => { state.checked.clear(); renderList(); };
 $('#deleteSelBtn').onclick = async () => {
