@@ -347,6 +347,34 @@
       </div>
     </details>
 
+    <details class="group" id="notifyGroup">
+      <summary>Phone notifications</summary>
+      <div class="group-body">
+        <div id="notifySetupSql" hidden>
+          <p class="hint">One-time database update needed. In Supabase, open <strong>SQL Editor</strong>, paste this and click <strong>Run</strong>, then reload this page.</p>
+          <textarea id="notifySql" rows="4" readonly>alter table public.settings
+  add column if not exists notify_topic text,
+  add column if not exists notify_owner text,
+  add column if not exists notify_url text;</textarea>
+          <button class="btn" id="copySqlBtn">Copy</button>
+        </div>
+        <div id="notifyOff" hidden>
+          <p class="hint">Get a notification on your phone when cards need approval or a print fails. It uses the free ntfy app.</p>
+          <button class="btn primary" id="notifyOnBtn">Turn on notifications</button>
+        </div>
+        <div id="notifyOn" hidden class="view" style="gap:12px">
+          <p class="hint">Notifications go to <strong id="notifyOwner"></strong>. Jobs you send yourself don't notify you.</p>
+          <ol class="hint" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+            <li>Install the free <strong>ntfy</strong> app from the App Store or Google Play.</li>
+            <li>In the app, tap <strong>+</strong> (Subscribe to topic) and enter this topic exactly:</li>
+          </ol>
+          <div class="row"><input type="text" id="notifyTopic" readonly class="grow" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px"><button class="btn" id="copyTopicBtn">Copy</button></div>
+          <p class="hint">Keep the topic private. Notifications never include members' names or details.</p>
+          <div class="row"><button class="btn grow" id="notifyTestBtn">Send a test</button><button class="btn grow" id="notifyMeBtn">Send them to me</button><button class="btn danger grow" id="notifyOffBtn">Turn off</button></div>
+        </div>
+      </div>
+    </details>
+
     <details class="group">
       <summary>Import and export</summary>
       <div class="group-body">
@@ -499,7 +527,7 @@ const WAITING = ['pending', 'approved', 'printing', 'failed'];
 const ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 
 const DEFAULT_SETTINGS = {
-  issuedDefault: new Date().toISOString().slice(0, 10),
+  issuedDefault: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),   // today, local time
   certText: 'This is to certify that the above\nnamed person is a holder of the\nTaekwondo {dan} Black Belt with\nthe Australian Martial Arts Academy',
   signText: 'Grand Master Ridvan Manav\n9th Dan Black Belt\nTaekwondo World Hall of Fame',
   signature: null,
@@ -884,12 +912,16 @@ function fromSettings(r) {
     signText: r.sign_text ?? DEFAULT_SETTINGS.signText,
     signature: r.signature_path || null,
     front: r.front_path || null,
-    requireApproval: r.require_approval ?? true
+    requireApproval: r.require_approval ?? true,
+    notifyTopic: r.notify_topic || null,
+    notifyOwner: r.notify_owner || null,
+    notifyUrl: r.notify_url || null
   };
 }
 async function loadSettings() {
   const { data, error } = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
   if (error) { if (!isNetworkError(error)) toast('Could not load settings: ' + errMsg(error), 6000); return; }
+  state.hasNotifyCols = !!data && Object.prototype.hasOwnProperty.call(data, 'notify_topic');
   state.settings = fromSettings(data);
   renderSettings(); renderPreview();
 }
@@ -900,7 +932,8 @@ async function saveSettingsNow() {
   const S = state.settings;
   const { error } = await sb.from('settings').upsert({
     id: 1, issued_default: S.issuedDefault || null, cert_text: S.certText, sign_text: S.signText,
-    signature_path: S.signature, front_path: S.front, require_approval: !!S.requireApproval, updated_at: nowISO()
+    signature_path: S.signature, front_path: S.front, require_approval: !!S.requireApproval, updated_at: nowISO(),
+    ...(state.hasNotifyCols ? { notify_topic: S.notifyTopic, notify_owner: S.notifyOwner, notify_url: S.notifyUrl } : {})
   });
   if (error) toast('Settings could not be saved: ' + errMsg(error), 6000);
 }
@@ -1279,6 +1312,9 @@ async function sendToPrinter(list) {
     });
     if (error) throw error;
     toast(auto ? 'Sent to the printer.' : 'Sent. Approve it in the Print queue.', 5000);
+    if (!auto && state.settings.notifyOwner !== state.email) {
+      notify('Cards need approval', `${list.length} card${list.length === 1 ? ' is' : 's are'} waiting for your approval.`, { tags: ['card_index'], priority: 4 });
+    }
     loadJobs();
     return true;
   } catch (err) {
@@ -1484,6 +1520,7 @@ function renderSettings() {
   const set = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v || ''; };
   set('#sIssued', state.settings.issuedDefault); set('#sCert', state.settings.certText); set('#sSign', state.settings.signText);
   $('#requireApproval').checked = !!state.settings.requireApproval;
+  renderNotify();
 }
 $('#sIssued').addEventListener('input', e => { state.settings.issuedDefault = e.target.value; saveSettingsSoon(); });
 $('#sCert').addEventListener('input', e => { state.settings.certText = e.target.value; saveSettingsSoon(); });
@@ -1512,6 +1549,56 @@ $('#sigReset').onclick = () => clearSettingImage('signature');
 $('#frontBtn').onclick = () => { $('#hiddenFront').value = ''; $('#hiddenFront').click(); };
 $('#hiddenFront').addEventListener('change', e => { const f = e.target.files[0]; if (f) replaceSettingImage('front', f, CARD_W * 1.5, 'image/jpeg', 'jpg'); });
 $('#frontReset').onclick = () => clearSettingImage('front');
+
+/* ---------- Phone notifications (ntfy app) ---------- */
+const NTFY = 'https://ntfy.sh/';
+function siteUrl() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
+async function notify(title, message, opts = {}) {
+  const S = state.settings;
+  if (!S.notifyTopic) return;
+  try {
+    // A plain-text JSON body keeps this a simple request the browser sends without a preflight
+    await fetch(NTFY, { method: 'POST', body: JSON.stringify({
+      topic: S.notifyTopic, title, message, tags: opts.tags || ['card_index'], priority: opts.priority || 3, click: S.notifyUrl || siteUrl()
+    }) });
+  } catch (e) { console.warn('Notification not sent', e); }
+}
+function renderNotify() {
+  const S = state.settings, cols = state.hasNotifyCols;
+  $('#notifySetupSql').hidden = cols;
+  $('#notifyOff').hidden = !cols || !!S.notifyTopic;
+  $('#notifyOn').hidden = !cols || !S.notifyTopic;
+  if (S.notifyTopic) {
+    $('#notifyTopic').value = S.notifyTopic;
+    $('#notifyOwner').textContent = S.notifyOwner || 'everyone';
+    $('#notifyMeBtn').hidden = S.notifyOwner === state.email;
+  }
+}
+function randomTopic() {
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  return 'ama-cards-' + [...a].map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+}
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+  catch { toast('Press and hold to copy.'); }
+}
+$('#copySqlBtn').onclick = e => copyText($('#notifySql').value, e.target);
+$('#copyTopicBtn').onclick = e => copyText($('#notifyTopic').value, e.target);
+$('#notifyOnBtn').onclick = async () => {
+  Object.assign(state.settings, { notifyTopic: randomTopic(), notifyOwner: state.email, notifyUrl: siteUrl() });
+  await saveSettingsNow(); renderNotify();
+  toast('Notifications are on. Subscribe to the topic in the ntfy app.', 5000);
+};
+$('#notifyMeBtn').onclick = async () => { state.settings.notifyOwner = state.email; state.settings.notifyUrl = siteUrl(); await saveSettingsNow(); renderNotify(); };
+$('#notifyOffBtn').onclick = async () => {
+  if (!await ask('Turn off phone notifications?', 'Turn off')) return;
+  Object.assign(state.settings, { notifyTopic: null, notifyOwner: null });
+  await saveSettingsNow(); renderNotify();
+};
+$('#notifyTestBtn').onclick = async () => {
+  await notify('AMA ID Cards', 'Test notification. Notifications are working.', { tags: ['white_check_mark'] });
+  toast('Test sent. It should arrive on your phone in a few seconds.');
+};
 
 /* ---------- Backup / restore ---------- */
 async function pathToDataURL(path) {

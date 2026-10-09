@@ -125,6 +125,17 @@ async function main() {
     if (error) log('Could not reset stuck jobs:', errText(error));
   }
 
+  // Phone notification through the ntfy app, if turned on in the website (More > Phone notifications)
+  async function notifyPhone(title, message) {
+    try {
+      const { data } = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
+      if (!data || !data.notify_topic) return;
+      await fetch('https://ntfy.sh/', { method: 'POST', body: JSON.stringify({
+        topic: data.notify_topic, title, message, tags: ['warning'], priority: 4, ...(data.notify_url ? { click: data.notify_url } : {})
+      }) });
+    } catch (e) { log('Could not send phone notification:', errText(e)); }
+  }
+
   async function printJob(job) {
     // Claim the job so it can only ever print once
     const { data: claimed, error: claimError } = await sb.from('print_jobs')
@@ -155,6 +166,7 @@ async function main() {
       const msg = errText(e).slice(0, 400);
       log(`Job ${job.id} failed: ${msg}`);
       await sb.from('print_jobs').update({ status: 'failed', error: msg }).eq('id', job.id);
+      await notifyPhone('Print failed', `${job.card_count} card${job.card_count === 1 ? '' : 's'} did not print: ${msg.slice(0, 160)}`);
     } finally {
       try { fs.unlinkSync(tmp); } catch { /* already gone */ }
     }

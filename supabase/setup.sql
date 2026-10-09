@@ -25,6 +25,10 @@ create table if not exists public.settings (
   require_approval boolean not null default true,
   updated_at       timestamptz not null default now()
 );
+alter table public.settings
+  add column if not exists notify_topic text,
+  add column if not exists notify_owner text,
+  add column if not exists notify_url text;
 insert into public.settings (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.print_jobs (
