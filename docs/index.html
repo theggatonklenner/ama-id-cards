@@ -1153,6 +1153,7 @@ $('#editForm').addEventListener('submit', async e => {
   const p = state.people.find(x => x.id === state.editingId); if (!p) return;
   const next = { ...p, name: $('#eName').value.trim(), dan: $('#eDan').value, dob: $('#eDob').value, issued: $('#eIssued').value };
   if (!next.name || !next.dan) return;
+  if (normName(next.name) !== normName(p.name) && !await okToAdd(next.name, p.id)) return;
   $('#eSave').disabled = true;
   try {
     const r = await savePerson(next, null);
@@ -1286,6 +1287,42 @@ async function sendToPrinter(list) {
   }
 }
 
+/* ---------- Duplicate check ---------- */
+const normName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0]; prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+function findDuplicate(name, exceptId) {
+  const n = normName(name); if (!n) return null;
+  const others = state.people.filter(p => p.id !== exceptId);
+  const exact = others.find(p => normName(p.name) === n);
+  if (exact) return { person: exact, exact: true };
+  if (n.length < 6) return null;
+  const close = others.find(p => editDistance(normName(p.name), n) <= 2);
+  return close ? { person: close, exact: false } : null;
+}
+// True when it is fine to save: no duplicate, or the user chose to add anyway
+async function okToAdd(name, exceptId) {
+  const d = findDuplicate(name, exceptId);
+  if (!d) return true;
+  const p = d.person;
+  const details = [p.dan, p.dob ? 'born ' + fmtShort(p.dob) : ''].filter(Boolean).join(', ');
+  const msg = d.exact
+    ? `${p.name}${details ? ` (${details})` : ''} is already in the system. Add another person with the same name?`
+    : `There is already someone with a similar name: ${p.name}${details ? ` (${details})` : ''}. Add ${name} anyway?`;
+  return ask(msg, 'Add anyway', false);
+}
+
 /* ---------- Add ---------- */
 let pendingPhoto = null;
 $('#fPhoto').addEventListener('change', async e => {
@@ -1303,6 +1340,7 @@ $('#personForm').addEventListener('submit', async e => {
   try {
     const p = { id: uuid(), photo: null, name: $('#fName').value.trim(), dob: $('#fDob').value, dan: $('#fDan').value, issued: $('#fIssued').value };
     if (!p.name || !p.dan) return;
+    if (!await okToAdd(p.name)) return;
     const r = await savePerson(p, pendingPhoto);
     toast(r === 'queued' ? QUEUED_MSG : `Added ${p.name}`, r === 'queued' ? 6000 : 3500);
     $('#personForm').reset(); pendingPhoto = null; $('#fPhotoPreview').hidden = true;
@@ -1335,9 +1373,14 @@ async function quickSave(p, blob) {
     toast(r === 'queued' ? `${p.name}: ${QUEUED_MSG}` : `Added ${p.name}`, r === 'queued' ? 6000 : 3500);
   } catch (err) { toast(`Could not save ${p.name}: ${errMsg(err)}`, 7000); }
 }
-$('#qSave').onclick = () => { const p = quickPerson(); if (!p) return; $('#quickDlg').close(); quickSave(p, quickBlob); };
-$('#qNext').onclick = () => {
+$('#qSave').onclick = async () => {
   const p = quickPerson(); if (!p) return;
+  if (!await okToAdd(p.name)) return;
+  $('#quickDlg').close(); quickSave(p, quickBlob);
+};
+$('#qNext').onclick = async () => {
+  const p = quickPerson(); if (!p) return;
+  if (!await okToAdd(p.name)) return;
   $('#quickDlg').close(); quickSave(p, quickBlob);
   $('#quickCam').value = ''; $('#quickCam').click();
 };
