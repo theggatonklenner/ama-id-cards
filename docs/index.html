@@ -120,8 +120,20 @@
 
   /* ---------- People list ---------- */
   .people { list-style: none; margin: 0; padding: 0; background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
-  .person { display: grid; grid-template-columns: auto 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  .person:last-child { border-bottom: 0; }
+  .pwrap { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+  .pwrap:last-child { border-bottom: 0; }
+  .person { position: relative; z-index: 1; background: var(--surface); display: grid; grid-template-columns: auto 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; touch-action: pan-y; }
+  .swipe-under { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-weight: 700; color: #fff; opacity: .75; }
+  .pwrap[data-dir="right"] .swipe-under { background: var(--accent); }
+  .pwrap[data-dir="left"] .swipe-under { background: var(--info); }
+  .pwrap[data-dir="right"] .sw-photo, .pwrap[data-dir="left"] .sw-print, .pwrap:not([data-dir="left"]):not([data-dir="right"]) .swipe-under { visibility: hidden; }
+  .pwrap.armed .swipe-under { opacity: 1; }
+  .swipe-tip { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .swipe-tip button { border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 4px; }
+  #pPhoto { position: relative; }
+  body.can-edit #pPhoto { cursor: pointer; }
+  body.can-edit #pPhoto::after { content: "Retake"; position: absolute; left: 4px; right: 4px; bottom: 4px; text-align: center; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); border-radius: 6px; padding: 2px 0; pointer-events: none; }
+  #ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 58px); z-index: 25; transform: translate(-50%, -40px); opacity: 0; background: var(--surface); color: var(--fg); box-shadow: var(--shadow); border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 600; pointer-events: none; }
   .person:hover { background: var(--hover); }
   .person.checked { background: var(--accent-soft); }
   .person .pick { display: none; }
@@ -296,6 +308,7 @@
       <select id="photoFilter" aria-label="Filter by photo"><option value="">Any photo</option></select>
       <button class="btn" id="selectBtn">Select</button>
     </div>
+    <div class="swipe-tip" id="swipeTip" hidden><span id="swipeTipText"></span><button id="swipeTipOk">Got it</button></div>
     <ul class="people" id="people"></ul>
     <div class="empty" id="emptyMsg" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/></svg>
@@ -1137,7 +1150,9 @@ function renderList() {
   const ul = $('#people'); ul.innerHTML = '';
   ul.classList.toggle('selecting', state.selecting);
   for (const p of list) {
-    const li = document.createElement('li');
+    const wrap = document.createElement('li'); wrap.className = 'pwrap';
+    wrap.innerHTML = '<div class="swipe-under"><span class="sw-print">Print</span><span class="sw-photo">Retake photo</span></div>';
+    const li = document.createElement('div');
     li.className = 'person' + (state.checked.has(p.id) ? ' checked' : '');
     const pick = document.createElement('input'); pick.type = 'checkbox'; pick.className = 'pick'; pick.checked = state.checked.has(p.id);
     pick.setAttribute('aria-label', 'Select ' + p.name); pick.tabIndex = -1;
@@ -1152,12 +1167,15 @@ function renderList() {
     li.append(pick, photoEl(p), who, dan);
     li.tabIndex = 0;
     const act = () => {
+      if (li.dataset.swiped) { delete li.dataset.swiped; return; }
       if (state.selecting) { toggleChecked(p.id); return; }
       openPerson(p.id);
     };
     li.addEventListener('click', act);
     li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
-    ul.appendChild(li);
+    attachSwipe(li, wrap, p);
+    wrap.appendChild(li);
+    ul.appendChild(wrap);
   }
   const empty = state.people.length === 0;
   $('#emptyMsg').hidden = list.length > 0;
@@ -1167,8 +1185,71 @@ function renderList() {
   const noPhoto = state.people.filter(p => !hasPhoto(p)).length;
   $('#countLabel').textContent = state.people.length ? `${state.people.length} people${noPhoto ? `, ${noPhoto} need a photo` : ''}` : '';
   renderSelBar();
+  renderSwipeTip();
 }
 function refreshPeopleViews() { renderList(); renderPreview(); }
+
+/* ---------- Swipe a person: right to print, left to retake their photo ---------- */
+const SWIPE_GO = 90;
+const isTouch = () => matchMedia('(pointer: coarse)').matches;
+function attachSwipe(row, wrap, p) {
+  const canRight = can('print'), canLeft = can('edit');
+  if (!canRight && !canLeft) return;
+  let x0 = null, y0 = 0, dx = 0, mode = null, buzzed = false;
+  row.addEventListener('touchstart', e => {
+    if (state.selecting || e.touches.length !== 1) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; mode = null; buzzed = false;
+    row.style.transition = 'none';
+  }, { passive: true });
+  row.addEventListener('touchmove', e => {
+    if (x0 === null || mode === 'scroll') return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (!mode) {
+      if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+      mode = Math.abs(mx) > Math.abs(my) * 1.2 ? 'swipe' : 'scroll';
+      if (mode === 'scroll') return;
+    }
+    e.preventDefault();
+    dx = (mx > 0 && !canRight) || (mx < 0 && !canLeft) ? 0 : Math.max(-150, Math.min(150, mx));
+    wrap.dataset.dir = dx > 0 ? 'right' : dx < 0 ? 'left' : '';
+    const armed = Math.abs(dx) >= SWIPE_GO;
+    wrap.classList.toggle('armed', armed);
+    if (armed && !buzzed && navigator.vibrate) { navigator.vibrate(10); buzzed = true; }
+    row.style.transform = `translateX(${dx}px)`;
+  }, { passive: false });
+  const end = () => {
+    if (x0 === null) return;
+    const go = mode === 'swipe' && Math.abs(dx) >= SWIPE_GO ? (dx > 0 ? 'print' : 'photo') : null;
+    if (mode === 'swipe') row.dataset.swiped = '1';
+    setTimeout(() => { delete row.dataset.swiped; }, 400);
+    row.style.transition = 'transform .2s'; row.style.transform = '';
+    setTimeout(() => { wrap.dataset.dir = ''; wrap.classList.remove('armed'); }, 200);
+    x0 = null; mode = null;
+    if (go === 'print') sendToPrinter([p]);
+    if (go === 'photo') retakePhoto(p.id);
+  };
+  row.addEventListener('touchend', end);
+  row.addEventListener('touchcancel', end);
+}
+function renderSwipeTip() {
+  const tips = [];
+  if (can('print')) tips.push('swipe right to print');
+  if (can('edit')) tips.push('swipe left to retake a photo');
+  const show = isTouch() && tips.length && store.get('amaSwipeTip') !== 'seen' && state.people.length > 0;
+  $('#swipeTip').hidden = !show;
+  if (show) $('#swipeTipText').textContent = 'Tip: ' + tips.join(', ') + '.';
+}
+$('#swipeTipOk').onclick = () => { store.set('amaSwipeTip', 'seen'); $('#swipeTip').hidden = true; };
+
+/* Take a new photo with the camera for a person */
+function retakePhoto(id) {
+  if (!can('edit')) return;
+  photoTargetId = id;
+  const input = $('#hiddenPhoto');
+  input.value = ''; input.setAttribute('capture', 'environment');
+  input.click();
+  setTimeout(() => input.removeAttribute('capture'), 1000);
+}
 
 /* ---------- Select mode ---------- */
 function setSelecting(on) {
@@ -1225,6 +1306,7 @@ function renderPersonCard() {
   $('#pSideFront').setAttribute('aria-pressed', String(sheetSide === 'front'));
   drawInto($('#pCard'), p, sheetSide);
 }
+$('#pPhoto').onclick = () => { if (can('edit')) retakePhoto(state.openId); };
 $('#pSideBack').onclick = () => { sheetSide = 'back'; renderPersonCard(); };
 $('#pSideFront').onclick = () => { sheetSide = 'front'; renderPersonCard(); };
 $('#pClose').onclick = () => $('#personDlg').close();
@@ -1255,7 +1337,7 @@ $('#eCancel').onclick = () => $('#editDlg').close();
 $('#editForm').addEventListener('submit', async e => {
   e.preventDefault();
   const p = state.people.find(x => x.id === state.editingId); if (!p) return;
-  const next = { ...p, name: $('#eName').value.trim(), dan: $('#eDan').value, dob: $('#eDob').value, issued: $('#eIssued').value };
+  const next = { ...p, name: tidyName($('#eName').value), dan: $('#eDan').value, dob: $('#eDob').value, issued: $('#eIssued').value };
   if (!next.name || !next.dan) return;
   if (normName(next.name) !== normName(p.name) && !await okToAdd(next.name, p.id)) return;
   $('#eSave').disabled = true;
@@ -1391,6 +1473,20 @@ async function sendToPrinter(list) {
   }
 }
 
+/* ---------- Tidy names: "jane SMITH" becomes "Jane Smith" ---------- */
+const NAME_PARTICLES = new Set(['van', 'der', 'den', 'de', 'da', 'di', 'du', 'del', 'della', 'von', 'le', 'la', 'bin', 'binti', 'al']);
+function tidyName(raw) {
+  const s = String(raw || '').replace(/\s+/g, ' ').trim();
+  return s.split(' ').map((w, i) => {
+    if (!w || (w !== w.toLowerCase() && w !== w.toUpperCase())) return w;   // already mixed case (e.g. McKenzie): leave it
+    const lower = w.toLowerCase();
+    if (i > 0 && w === lower && NAME_PARTICLES.has(lower)) return lower;   // keep "van", "de" lower case when typed that way
+    return lower.replace(/(^|[-'’])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase())
+                .replace(/^Mc(\p{L})/u, (m, ch) => 'Mc' + ch.toUpperCase());
+  }).join(' ');
+}
+['#fName', '#qName', '#eName'].forEach(id => $(id).addEventListener('blur', e => { e.target.value = tidyName(e.target.value); }));
+
 /* ---------- Duplicate check ---------- */
 const normName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function editDistance(a, b) {
@@ -1442,7 +1538,7 @@ $('#personForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
-    const p = { id: uuid(), photo: null, name: $('#fName').value.trim(), dob: $('#fDob').value, dan: $('#fDan').value, issued: $('#fIssued').value };
+    const p = { id: uuid(), photo: null, name: tidyName($('#fName').value), dob: $('#fDob').value, dan: $('#fDan').value, issued: $('#fIssued').value };
     if (!p.name || !p.dan) return;
     if (!await okToAdd(p.name)) return;
     const r = await savePerson(p, pendingPhoto);
@@ -1467,7 +1563,7 @@ $('#quickCam').addEventListener('change', async e => {
   setTimeout(() => $('#qName').focus(), 150);
 });
 function quickPerson() {
-  const name = $('#qName').value.trim(), dan = $('#qDan').value;
+  const name = tidyName($('#qName').value), dan = $('#qDan').value;
   if (!name || !dan) { $('#qError').textContent = 'Enter a name and choose a dan.'; $('#qError').hidden = false; return null; }
   return { id: uuid(), name, dan, dob: $('#qDob').value, issued: '', photo: null };
 }
@@ -1534,7 +1630,7 @@ $('#hiddenCsv').addEventListener('change', async e => {
   const add = [];
   for (const r of rows.slice(1)) {
     const o = {}; keys.forEach((k, i) => { if (k) o[k] = (r[i] || '').trim(); });
-    const name = o.name || [o.first, o.last].filter(Boolean).join(' ');
+    const name = tidyName(o.name || [o.first, o.last].filter(Boolean).join(' '));
     if (name) add.push({ id: uuid(), photo: null, name, dob: normDate(o.dob), dan: o.dan || '', issued: normDate(o.issued) });
   }
   if (!add.length) return toast('No people found in the CSV.');
@@ -1935,6 +2031,45 @@ async function startApp(session) {
 }
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+/* ---------- Pull down to refresh (phones) ---------- */
+(function pullToRefresh() {
+  const ind = document.createElement('div'); ind.id = 'ptr'; ind.textContent = 'Pull to refresh'; document.body.appendChild(ind);
+  const READY = 64;
+  let y0 = null, x0 = 0, dy = 0, active = false, busy = false;
+  const reset = () => { ind.style.transition = 'transform .2s, opacity .2s'; ind.style.transform = 'translate(-50%, -40px)'; ind.style.opacity = 0; };
+  window.addEventListener('touchstart', e => {
+    y0 = null;
+    if (busy || !state.started || window.scrollY > 0 || e.touches.length !== 1 || document.querySelector('dialog[open]')) return;
+    if (!['people', 'queue'].includes(state.view)) return;
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; active = false;
+    ind.style.transition = 'none';
+  }, { passive: true });
+  window.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    const d = e.touches[0].clientY - y0, sx = Math.abs(e.touches[0].clientX - x0);
+    if (!active) {
+      if (d > 12 && sx < d) active = true;
+      else if (d < 0 || sx > 12) { y0 = null; return; }
+      else return;
+    }
+    if (window.scrollY > 0) { y0 = null; reset(); return; }
+    e.preventDefault();
+    dy = Math.min(110, d * 0.5);
+    ind.style.transform = `translate(-50%, ${dy - 40}px)`;
+    ind.style.opacity = Math.min(1, dy / READY);
+    ind.textContent = dy >= READY ? 'Release to refresh' : 'Pull to refresh';
+  }, { passive: false });
+  window.addEventListener('touchend', async () => {
+    if (y0 === null) return;
+    const go = active && dy >= READY;
+    y0 = null; active = false;
+    if (!go) return reset();
+    busy = true; ind.textContent = 'Refreshing...';
+    try { await Promise.all([loadPeople(), loadJobs(), loadStation(), loadSettings()]); flushOutbox(); toast('Up to date.', 1500); }
+    finally { busy = false; reset(); }
+  });
+})();
 
 (function boot() {
   const cfg = window.AMA_CONFIG || {};
