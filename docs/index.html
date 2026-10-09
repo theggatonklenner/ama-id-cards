@@ -142,7 +142,9 @@
     background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.08); padding: 10px 16px; }
   .selbar-inner { max-width: 820px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto auto; gap: 6px 8px; align-items: center; }
   .selbar .count { color: var(--fg); font-weight: 600; }
-  .sel-acts { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; }
+  .sel-acts { grid-column: 1 / -1; display: flex; gap: 8px; }
+  .sel-acts .btn { flex: 1 1 0; }
+  .sel-acts .btn.primary { flex-grow: 1.6; }
   @media (min-width: 900px) { .selbar-inner { grid-template-columns: auto auto auto 1fr; } .sel-acts { grid-column: auto; justify-self: end; grid-template-columns: repeat(3, auto); } }
   @media (min-width: 900px) { .selbar { bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); } }
   body.selecting main { padding-bottom: calc(var(--tabbar-h) + 140px); }
@@ -292,7 +294,7 @@
     <div class="filters">
       <select id="danFilter" aria-label="Filter by dan"><option value="">All dans</option></select>
       <select id="photoFilter" aria-label="Filter by photo"><option value="">Any photo</option></select>
-      <button class="btn need-print" id="selectBtn">Select</button>
+      <button class="btn" id="selectBtn">Select</button>
     </div>
     <ul class="people" id="people"></ul>
     <div class="empty" id="emptyMsg" hidden>
@@ -468,9 +470,9 @@
     <button class="btn ghost" id="selAllBtn">Select all shown</button>
     <button class="btn ghost" id="selDoneBtn">Done</button>
     <div class="sel-acts">
-      <button class="btn primary" id="selPrintBtn">Print</button>
-      <button class="btn" id="selPdfBtn">PDF</button>
-      <button class="btn danger" id="selDeleteBtn">Delete</button>
+      <button class="btn primary need-print" id="selPrintBtn">Print</button>
+      <button class="btn" id="selPdfBtn">Download PDF</button>
+      <button class="btn danger need-delete" id="selDeleteBtn">Delete</button>
     </div>
   </div>
 </div>
@@ -558,6 +560,18 @@
   <div class="dlg-actions"><button class="btn" id="jobDlgClose">Close</button><button class="btn primary" id="jobDlgApprove" hidden>Approve and print</button></div>
 </dialog>
 
+<!-- Download PDF -->
+<dialog id="pdfDlg" class="sheet">
+  <h3>Download PDF</h3>
+  <p class="hint" id="pdfCount"></p>
+  <div class="view" style="gap:10px">
+    <label class="switch" style="justify-content:flex-start;gap:12px"><input type="radio" name="pdfLayout" value="cards" checked> <span><strong>Card size</strong><br><span class="hint">One card per page, ready for the card printer</span></span></label>
+    <label class="switch" style="justify-content:flex-start;gap:12px"><input type="radio" name="pdfLayout" value="a4"> <span><strong>A4 sheets</strong><br><span class="hint">8 cards per page, for checking or printing on paper</span></span></label>
+    <label class="switch">Include the front side <input type="checkbox" id="pdfFront" checked></label>
+  </div>
+  <div class="dlg-actions"><button class="btn" id="pdfCancel">Cancel</button><button class="btn primary" id="pdfGo">Download</button></div>
+</dialog>
+
 <!-- Confirm -->
 <dialog id="askDlg">
   <p id="askMsg"></p>
@@ -605,6 +619,7 @@ const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
 const slug = s => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'en', { sensitivity: 'base' });
 const nowISO = () => new Date().toISOString();
+const localDay = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);   // today's date where you are
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
 /* ---------- Small UI helpers ---------- */
@@ -1537,7 +1552,7 @@ $('#exportListBtn').onclick = () => {
   const rows = [['Name', 'Date of birth', 'Dan', 'Issued', 'Photo']];
   for (const p of list) rows.push([p.name, fmtShort(p.dob), p.dan || '', fmtShort(p.issued || state.settings.issuedDefault), hasPhoto(p) ? 'Yes' : 'No']);
   const dan = $('#danFilter').value;
-  downloadFile(`ama-members${dan ? '-' + slug(dan) : ''}-${nowISO().slice(0, 10)}.csv`, '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n');
+  downloadFile(`ama-members${dan ? '-' + slug(dan) : ''}-${localDay()}.csv`, '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n');
 };
 $('#bulkPhotoBtn').onclick = () => { $('#hiddenBulkPhotos').value = ''; $('#hiddenBulkPhotos').click(); };
 $('#hiddenBulkPhotos').addEventListener('change', async e => {
@@ -1558,15 +1573,52 @@ function downloadFile(filename, data) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-async function downloadPdf(list) {
+// A4 sheets: 2 cards across, 4 down, actual size, with light cut marks
+async function buildA4Pdf(list, withFront) {
+  if (!window.jspdf) throw new Error('The PDF tool did not load. Reload the page and try again.');
+  await ensureFonts();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 85.6, H = 54, GX = 8, GY = 8, COLS = 2, ROWS = 4;
+  const left = (210 - (COLS * W + (COLS - 1) * GX)) / 2, top = (297 - (ROWS * H + (ROWS - 1) * GY)) / 2;
+  const c = document.createElement('canvas'); c.width = CARD_W; c.height = CARD_H;
+  const ctx = c.getContext('2d');
+  // Each tile is one card side: with the front, each person gets a row (back, then front)
+  const tiles = [];
+  let frontImg = null;
+  if (withFront) { await drawFront(ctx); frontImg = c.toDataURL('image/jpeg', 0.92); }
+  for (const p of list) { tiles.push({ p }); if (withFront) tiles.push({ front: true }); }
+  for (let i = 0; i < tiles.length; i++) {
+    const slot = i % (COLS * ROWS);
+    if (i > 0 && slot === 0) doc.addPage('a4', 'portrait');
+    const x = left + (slot % COLS) * (W + GX), y = top + Math.floor(slot / COLS) * (H + GY);
+    let img = frontImg;
+    if (!tiles[i].front) { await drawBack(ctx, tiles[i].p); img = c.toDataURL('image/jpeg', 0.92); }
+    doc.addImage(img, 'JPEG', x, y, W, H);
+    doc.setDrawColor(190); doc.setLineWidth(0.1); doc.roundedRect(x, y, W, H, 3, 3);
+  }
+  return doc.output('blob');
+}
+let pdfList = [];
+function downloadPdf(list) {
   if (!list.length) return toast('No one is selected.');
-  toast('Building PDF...', 0);
+  pdfList = list;
+  $('#pdfCount').textContent = list.length === 1 ? `Card for ${list[0].name}` : `${list.length} cards`;
+  $('#pdfFront').checked = ($('#sides').value || 'both') === 'both';
+  $('#pdfDlg').showModal();
+}
+$('#pdfCancel').onclick = () => $('#pdfDlg').close();
+$('#pdfGo').onclick = async () => {
+  const list = pdfList, a4 = document.querySelector('input[name=pdfLayout]:checked').value === 'a4', withFront = $('#pdfFront').checked;
+  $('#pdfDlg').close();
+  toast(`Building PDF of ${list.length} card${list.length === 1 ? '' : 's'}...`, 0);
   try {
-    const blob = await buildPdf(list, $('#sides').value === 'both');
-    downloadFile(list.length === 1 ? `${slug(list[0].name)}-id-card.pdf` : `ama-id-cards-${nowISO().slice(0, 10)}.pdf`, blob);
+    const blob = a4 ? await buildA4Pdf(list, withFront) : await buildPdf(list, withFront);
+    const base = list.length === 1 ? `${slug(list[0].name)}-id-card` : `ama-id-cards-${localDay()}`;
+    downloadFile(`${base}${a4 ? '-a4' : ''}.pdf`, blob);
     toast('PDF downloaded.');
   } catch (err) { toast(errMsg(err), 6000); }
-}
+};
 
 /* ---------- Settings ---------- */
 function renderSettings() {
@@ -1707,7 +1759,7 @@ $('#backupBtn').onclick = async () => {
   const S = state.settings;
   const settings = { issuedDefault: S.issuedDefault, certText: S.certText, signText: S.signText, requireApproval: S.requireApproval,
     signature: await pathToDataURL(S.signature), front: await pathToDataURL(S.front) };
-  downloadFile(`ama-id-cards-backup-${nowISO().slice(0, 10)}.json`, JSON.stringify({ version: 4, people, settings }));
+  downloadFile(`ama-id-cards-backup-${localDay()}.json`, JSON.stringify({ version: 4, people, settings }));
   toast('Backup downloaded.');
 };
 $('#restoreBtn').onclick = () => { $('#hiddenRestore').value = ''; $('#hiddenRestore').click(); };
