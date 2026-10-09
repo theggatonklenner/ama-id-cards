@@ -3,7 +3,7 @@
 // Libraries and fonts never change at the same address, so they are kept once downloaded.
 // Supabase requests (member data) are never stored here.
 
-const CACHE = 'ama-cards-v2';
+const CACHE = 'ama-cards-v3';
 const SHELL = ['./', './index.html', './config.js', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 const LIB_HOSTS = /(^|\.)(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)$/;
 
@@ -29,7 +29,8 @@ function store(req, res) {
 
 // Try the network, but give up after a few seconds on a weak signal
 function networkFirst(req) {
-  const fromNetwork = fetch(req).then(res => store(req, res));
+  // no-cache: always check with GitHub for a newer version instead of using the browser's 10-minute copy
+  const fromNetwork = fetch(req, { cache: 'no-cache' }).then(res => store(req, res));
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 4000));
   return Promise.race([fromNetwork, timeout]).catch(() =>
     caches.match(req).then(hit => hit || fromNetwork.catch(() => caches.match('./index.html')))
