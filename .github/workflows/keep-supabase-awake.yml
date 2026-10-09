@@ -19,7 +19,6 @@ jobs:
           if [ -z "$URL" ] || [ -z "$KEY" ] || echo "$KEY" | grep -q "YOUR-"; then
             echo "docs/config.js is not filled in yet."; exit 1
           fi
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/settings?select=id&limit=1" \
-            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/settings?select=id&limit=1" -H "apikey: $KEY")
           echo "Supabase answered with HTTP $STATUS"
           [ "$STATUS" -lt 500 ]
