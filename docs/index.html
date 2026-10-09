@@ -128,7 +128,7 @@
     #headerTools { width: 100%; }
     #headerTools .pill { flex-basis: 100%; text-align: center; padding-block: 6px; }
     #headerTools button { flex: 1 1 0; min-height: 38px; padding: 6px 8px; font-size: 14px; }
-    main { display: flex; flex-direction: column; gap: 16px; }
+    main { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
     .col { display: contents; }
     #panelPeople { order: 1; } #panelPrinting { order: 2; } #panelAdd { order: 3; }
     #panelPreview { order: 4; } #panelBulk { order: 5; } #panelSettings { order: 6; }
@@ -164,6 +164,22 @@
     body.has-sel-bar { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
     body.has-sel-bar #toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   }
+  /* Simple mode: just find a person, print, add someone, approve jobs */
+  body.simple .full-only,
+  body.simple #panelBulk, body.simple #panelSettings, body.simple #panelPreview,
+  body.simple #backupBtn, body.simple #restoreBtn,
+  body.simple #selectAllBtn, body.simple #selectNoneBtn, body.simple #deleteSelBtn,
+  body.simple #panelPeople > .row, body.simple .approval-toggle,
+  body.simple #rows td:nth-child(1), body.simple thead th:first-child, body.simple #selBar { display: none !important; }
+  body.simple #simpleBtn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  body.simple #rows .actions button { font-size: 16px; min-height: 44px; padding-inline: 16px; }
+  body.simple .job .btns button { font-size: 16px; min-height: 44px; }
+  @media (max-width: 700px) {
+    body.simple #rows tr { grid-template-columns: 48px auto minmax(0, 1fr);
+      grid-template-areas: "photo name name" "photo dob dan" "act act act"; }
+    body.simple.has-sel-bar { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    body.simple.has-sel-bar #toast { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+  }
 </style>
 </head>
 <body>
@@ -172,6 +188,7 @@
     <h1>AMA ID Cards<small>Australian Martial Arts Academy, dan certificate cards (CR80, 85.6 x 54 mm)</small></h1>
     <div class="row" id="headerTools" hidden>
       <span class="pill" id="stationPill">Print station: checking...</span>
+      <button id="simpleBtn">Simple mode</button>
       <button id="backupBtn">Backup</button>
       <button id="restoreBtn">Restore</button>
       <button id="signOutBtn" title="">Sign out</button>
@@ -271,7 +288,7 @@
 
       <section class="panel" id="panelPrinting">
         <div class="panel-head"><h2>Printing</h2><span class="count" id="stationText"></span></div>
-        <label class="switch"><input type="checkbox" id="requireApproval"> Jobs need approval before they print</label>
+        <label class="switch approval-toggle"><input type="checkbox" id="requireApproval"> Jobs need approval before they print</label>
         <div class="jobs" id="jobs"></div>
         <div id="jobsEmpty" class="empty">No print jobs yet. Select people and click "Send selected to printer".</div>
       </section>
@@ -635,14 +652,16 @@ function renderList() {
       <td class="num">${esc(fmtShort(p.dob))}</td>
       <td>${p.dan ? `<span class="dan">${esc(p.dan)}</span>` : ''}</td>
       <td><div class="actions">
+        <button class="small primary" data-a="print">Print</button>
         <button class="small" data-a="photo">${p.photo ? 'Change photo' : 'Add photo'}</button>
         <button class="small" data-a="edit">Edit</button>
-        <button class="small danger" data-a="del">Delete</button>
+        <button class="small danger full-only" data-a="del">Delete</button>
       </div></td>`;
     if (p.photo) { const img = tr.querySelector('img.thumb'); fileUrl(p.photo).then(u => { if (u) img.src = u; }); }
     tr.addEventListener('click', async e => {
       const a = e.target.dataset.a;
       if (e.target.classList.contains('sel')) { e.target.checked ? state.checked.add(p.id) : state.checked.delete(p.id); updateCount(); return; }
+      if (a === 'print') { sendToPrinter([p]); return; }
       if (a === 'photo') { photoTargetId = p.id; $('#hiddenPhoto').value = ''; $('#hiddenPhoto').click(); }
       else if (a === 'edit') startEdit(p);
       else if (a === 'del') {
@@ -1007,6 +1026,15 @@ $('#hiddenRestore').addEventListener('change', async e => {
   await saveSettingsNow(); renderSettings(); renderList(); renderPreview();
   toast(`Restored ${added} ${added === 1 ? 'person' : 'people'}${skipped ? `, skipped ${skipped}` : ''}.`, 6000);
 });
+
+/* ---------- Simple mode (remembered on each device) ---------- */
+function applySimple(on) {
+  document.body.classList.toggle('simple', on);
+  $('#simpleBtn').textContent = on ? 'Full mode' : 'Simple mode';
+  try { localStorage.setItem('amaSimple', on ? '1' : '0'); } catch { /* not saved on this device */ }
+}
+$('#simpleBtn').onclick = () => applySimple(!document.body.classList.contains('simple'));
+try { applySimple(localStorage.getItem('amaSimple') === '1'); } catch { applySimple(false); }
 
 /* ---------- Sign in and start ---------- */
 $('#loginForm').addEventListener('submit', async e => {
