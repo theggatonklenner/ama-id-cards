@@ -5,5 +5,5 @@
 
 window.AMA_CONFIG = {
   SUPABASE_URL: 'https://ptdrcxngaptcgswfbjhg.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-ANON-PUBLIC-KEY'
+  SUPABASE_ANON_KEY: 'sb_publishable_YsRY6SlgR7U_ohn_xxQD1A_lrowkIGS'
 };
