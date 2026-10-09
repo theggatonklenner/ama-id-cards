@@ -220,6 +220,18 @@
   body.selecting #toast { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 130px); }
   @media (min-width: 900px) { #toast { bottom: 24px; } }
 
+  /* What each role can see: admin, approver, photos, viewer */
+  body:not(.can-print)  .need-print,
+  body:not(.can-edit)   .need-edit,
+  body:not(.can-delete) .need-delete,
+  body:not(.can-admin)  .need-admin { display: none !important; }
+  .tabbar.three { grid-template-columns: repeat(3, 1fr); }
+  .role-tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .users { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .users li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .users li:last-child { border-bottom: 0; }
+  .users .em { overflow-wrap: anywhere; font-size: 15px; }
+  .users select { width: auto; min-height: 40px; padding: 6px 8px; font-size: 15px; }
   .auth { max-width: 380px; margin: 12vh auto 0; padding: 0 16px; }
   @media (prefers-reduced-motion: no-preference) { .btn, .tab, .person { transition: background .12s, color .12s; } }
 </style>
@@ -239,7 +251,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg>People</button>
   <button class="tab" role="tab" data-view="queue" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>Print queue<span class="badge" id="queueBadge" hidden></span></button>
-  <button class="tab" role="tab" data-view="add" aria-selected="false">
+  <button class="tab need-edit" role="tab" data-view="add" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Add</button>
   <button class="tab" role="tab" data-view="more" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>More</button>
@@ -259,6 +271,14 @@
   </div>
 </section>
 
+<section class="auth" id="noAccessView" hidden>
+  <div class="card">
+    <h2>No access yet</h2>
+    <p>Your login (<strong id="noAccessEmail"></strong>) works, but it hasn't been given a role. Ask an admin to add you in More &gt; Users.</p>
+    <button class="btn" id="noAccessSignOut">Sign out</button>
+  </div>
+</section>
+
 <section class="auth" id="configView" hidden>
   <div class="card"><h2>Almost there</h2><p>This site is not connected to the database yet. Put your Supabase project URL and key in <strong>config.js</strong>.</p></div>
 </section>
@@ -272,13 +292,13 @@
     <div class="filters">
       <select id="danFilter" aria-label="Filter by dan"><option value="">All dans</option></select>
       <select id="photoFilter" aria-label="Filter by photo"><option value="">Any photo</option></select>
-      <button class="btn" id="selectBtn">Select</button>
+      <button class="btn need-print" id="selectBtn">Select</button>
     </div>
     <ul class="people" id="people"></ul>
     <div class="empty" id="emptyMsg" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/></svg>
       <span id="emptyText">No one here yet.</span>
-      <button class="btn primary" id="emptyAddBtn">Add the first person</button>
+      <button class="btn primary need-edit" id="emptyAddBtn">Add the first person</button>
     </div>
   </section>
 
@@ -323,17 +343,17 @@
   <section class="view" id="view-more" hidden>
     <div class="view-head"><h2>More</h2></div>
 
-    <details class="group" open>
+    <details class="group need-print" open>
       <summary>Printing</summary>
       <div class="group-body">
-        <label class="switch">Jobs need approval before they print <input type="checkbox" id="requireApproval"></label>
+        <label class="switch need-admin">Jobs need approval before they print <input type="checkbox" id="requireApproval"></label>
         <div class="field"><label for="sides">Print</label>
           <select id="sides"><option value="both">Both sides (front then back)</option><option value="back">Personal side only</option></select>
         </div>
       </div>
     </details>
 
-    <details class="group">
+    <details class="group need-admin">
       <summary>Card design</summary>
       <div class="group-body">
         <canvas id="settingsPreview" width="1011" height="638"></canvas>
@@ -384,14 +404,36 @@
       <div class="group-body">
         <div class="row"><button class="btn grow" id="exportListBtn">Export people list (CSV)</button></div>
         <p class="hint">Exports the people shown in People, using the current search and filters.</p>
-        <div class="row"><button class="btn grow" id="csvBtn">Import CSV</button><button class="btn grow" id="csvTemplateBtn">CSV template</button></div>
-        <p class="hint">CSV columns: name, dob, dan, issued.</p>
-        <div class="row"><button class="btn grow" id="bulkPhotoBtn">Match photos by file name</button></div>
-        <p class="hint">Name each photo after the person, e.g. jane-smith.jpg.</p>
+        <div class="row need-edit"><button class="btn grow" id="csvBtn">Import CSV</button><button class="btn grow" id="csvTemplateBtn">CSV template</button></div>
+        <p class="hint need-edit">CSV columns: name, dob, dan, issued.</p>
+        <div class="row need-edit"><button class="btn grow" id="bulkPhotoBtn">Match photos by file name</button></div>
+        <p class="hint need-edit">Name each photo after the person, e.g. jane-smith.jpg.</p>
       </div>
     </details>
 
-    <details class="group">
+    <details class="group need-admin" id="usersGroup">
+      <summary>Users</summary>
+      <div class="group-body">
+        <p class="hint" id="rolesMissing" hidden style="color:var(--warn)">Roles aren't set up in the database yet. Run supabase/roles.sql in Supabase (SQL Editor), then reload.</p>
+        <ul class="users" id="usersList"></ul>
+        <form id="addUserForm" class="view" style="gap:10px">
+          <h3>Add a user</h3>
+          <div class="field"><label for="uEmail">Email</label><input type="email" id="uEmail" autocomplete="off" required></div>
+          <div class="field"><label for="uRole">Role</label><select id="uRole"></select></div>
+          <div class="field"><label for="uPassword">Starting password</label><input type="text" id="uPassword" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"><p class="hint">Give this to them. Leave blank to only change the role of an existing login.</p></div>
+          <button type="submit" class="btn primary" id="addUserBtn">Add user</button>
+        </form>
+        <dl class="facts small" style="margin:0">
+          <dt>Admin</dt><dd>Everything, including card design, backups and users</dd>
+          <dt>Approver</dt><dd>Add, edit and delete people, take photos, print and approve</dd>
+          <dt>Photos</dt><dd>Add people, edit details and take photos</dd>
+          <dt>Viewer</dt><dd>Look only</dd>
+          <dt>Print station</dt><dd>For the laptop's print station login only</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="group need-admin">
       <summary>Backup</summary>
       <div class="group-body">
         <div class="row"><button class="btn grow" id="backupBtn">Download backup</button><button class="btn grow" id="restoreBtn">Restore</button></div>
@@ -402,7 +444,7 @@
     <div class="group">
       <div class="group-head"><span>Account</span></div>
       <div class="group-body">
-        <p class="hint">Signed in as <strong id="whoAmI"></strong></p>
+        <p class="hint">Signed in as <strong id="whoAmI"></strong> <span class="role-tag" id="myRoleTag" hidden></span></p>
         <button class="btn danger" id="signOutBtn">Sign out</button>
       </div>
     </div>
@@ -453,11 +495,11 @@
   </div>
   <canvas class="card-preview" id="pCard" width="1011" height="638"></canvas>
   <div class="actions-grid">
-    <button class="btn primary big" id="pPrint">Print card</button>
-    <button class="btn" id="pPhotoBtn">Change photo</button>
-    <button class="btn" id="pEdit">Edit details</button>
+    <button class="btn primary big need-print" id="pPrint">Print card</button>
+    <button class="btn need-edit" id="pPhotoBtn">Change photo</button>
+    <button class="btn need-edit" id="pEdit">Edit details</button>
     <button class="btn" id="pPdf">Download PDF</button>
-    <button class="btn danger" id="pDelete">Delete</button>
+    <button class="btn danger need-delete" id="pDelete">Delete</button>
   </div>
 </dialog>
 
@@ -1232,9 +1274,9 @@ function renderJobs() {
     const [label, kind] = STATUS[j.status] || [j.status, ''];
     const div = document.createElement('div'); div.className = 'job';
     let btns = '<button class="btn" data-a="preview">Preview</button>';
-    if (j.status === 'pending') btns += '<button class="btn danger" data-a="cancel">Cancel</button><button class="btn primary" data-a="approve">Approve</button>';
-    else if (j.status === 'approved') btns += '<button class="btn danger" data-a="cancel">Cancel</button>';
-    else if (j.status === 'failed') btns += '<button class="btn danger" data-a="cancel">Remove</button><button class="btn primary" data-a="retry">Try again</button>';
+    if (j.status === 'pending') btns += '<button class="btn danger need-print" data-a="cancel">Cancel</button><button class="btn primary need-print" data-a="approve">Approve</button>';
+    else if (j.status === 'approved') btns += '<button class="btn danger need-print" data-a="cancel">Cancel</button>';
+    else if (j.status === 'failed') btns += '<button class="btn danger need-print" data-a="cancel">Remove</button><button class="btn primary need-print" data-a="retry">Try again</button>';
     div.innerHTML = `
       <div class="job-top"><div><div class="names">${esc(summariseNames(j.people_names))}</div>
         <div class="meta">${j.card_count} card${j.card_count === 1 ? '' : 's'}, ${j.sides === 'both' ? 'both sides' : 'personal side'} · ${esc(fmtWhen(j.created_at))}${j.created_by_email ? ' · ' + esc(j.created_by_email) : ''}</div></div>
@@ -1264,7 +1306,7 @@ async function openJobPreview(j) {
   const dlg = $('#jobDlg'), body = $('#jobDlgBody'), ap = $('#jobDlgApprove');
   const names = j.people_names || [], n = j.card_count || names.length;
   $('#jobDlgMeta').textContent = `${n} card${n === 1 ? '' : 's'}, ${j.sides === 'both' ? 'both sides' : 'personal side only'}`;
-  ap.hidden = j.status !== 'pending';
+  ap.hidden = j.status !== 'pending' || !can('print');
   ap.onclick = async () => {
     ap.disabled = true;
     try { await updateJob(j, { status: 'approved', approved_at: nowISO(), approved_by_email: state.email, error: null }); dlg.close(); toast('Approved. It will print shortly.'); }
@@ -1691,6 +1733,82 @@ $('#hiddenRestore').addEventListener('change', async e => {
   toast(`Restored ${added} ${added === 1 ? 'person' : 'people'}${skipped ? `, skipped ${skipped}` : ''}.`, 6000);
 });
 
+/* ---------- Roles ---------- */
+const ROLE_NAMES = { admin: 'Admin', approver: 'Approver', photos: 'Photos', viewer: 'Viewer', printer: 'Print station' };
+const ROLE_CAN = {
+  admin:    ['print', 'edit', 'delete', 'admin'],
+  approver: ['print', 'edit', 'delete'],
+  photos:   ['edit'],
+  viewer:   [],
+  printer:  []
+};
+function can(what) { return (ROLE_CAN[state.role] || []).includes(what); }
+function applyRole() {
+  for (const c of ['print', 'edit', 'delete', 'admin']) document.body.classList.toggle('can-' + c, can(c));
+  $('#tabbar').classList.toggle('three', !can('edit'));
+  const tag = $('#myRoleTag'); tag.hidden = !state.role; tag.textContent = ROLE_NAMES[state.role] || '';
+  $('#uRole').innerHTML = Object.entries(ROLE_NAMES).map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+  $('#uRole').value = 'photos';
+}
+async function loadMyRole() {
+  const { data, error } = await sb.rpc('my_role');
+  if (error) {
+    // Roles not set up yet: keep full access so nothing breaks
+    state.rolesReady = false; state.role = 'admin';
+  } else { state.rolesReady = true; state.role = data || null; }
+}
+async function loadUsers() {
+  $('#rolesMissing').hidden = state.rolesReady;
+  $('#addUserForm').hidden = !state.rolesReady;
+  const ul = $('#usersList'); ul.innerHTML = '';
+  if (!state.rolesReady) return;
+  const { data, error } = await sb.from('staff_roles').select('*').order('email');
+  if (error) { ul.innerHTML = `<li class="hint">${esc(errMsg(error))}</li>`; return; }
+  for (const u of data) {
+    const li = document.createElement('li');
+    const me = u.email === state.email.toLowerCase();
+    li.innerHTML = `<span class="em">${esc(u.email)}${me ? ' <span class="hint">(you)</span>' : ''}</span>
+      <select aria-label="Role for ${esc(u.email)}">${Object.entries(ROLE_NAMES).map(([v, n]) => `<option value="${v}"${v === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select>
+      <button class="btn danger" ${me ? 'disabled title="You can\'t remove yourself"' : ''}>Remove</button>`;
+    const sel = li.querySelector('select');
+    sel.onchange = async () => {
+      const { error: e2 } = await sb.from('staff_roles').update({ role: sel.value }).eq('email', u.email);
+      if (e2) { toast(/admin/i.test(errMsg(e2)) ? 'There must always be at least one admin.' : 'Could not change role: ' + errMsg(e2), 6000); sel.value = u.role; return; }
+      u.role = sel.value; toast(`${u.email} is now ${ROLE_NAMES[sel.value]}.`);
+      if (me) { await loadMyRole(); applyRole(); }
+    };
+    li.querySelector('button').onclick = async () => {
+      if (!await ask(`Remove ${u.email}? They won't be able to sign in any more.`, 'Remove')) return;
+      try { await usersCall({ action: 'remove', email: u.email }); toast(`Removed ${u.email}.`); loadUsers(); }
+      catch (err) { toast(errMsg(err), 7000); }
+    };
+    ul.appendChild(li);
+  }
+}
+async function usersCall(body) {
+  const { data } = await sb.auth.getSession();
+  const res = await fetch(fnUrl() + '?users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session && data.session.access_token) },
+    body: JSON.stringify(body)
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || 'The notify function is not set up yet. See SETUP.md.');
+  return out;
+}
+$('#usersGroup').addEventListener('toggle', e => { if (e.target.open) loadUsers(); });
+$('#addUserForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('#addUserBtn'); btn.disabled = true;
+  try {
+    const out = await usersCall({ action: 'create', email: $('#uEmail').value, role: $('#uRole').value, password: $('#uPassword').value });
+    toast(out.existed ? 'Role updated for that existing login.' : 'User added. Give them their email and starting password.', 6000);
+    $('#addUserForm').reset(); $('#uRole').value = 'photos'; loadUsers();
+  } catch (err) { toast(errMsg(err), 7000); }
+  finally { btn.disabled = false; }
+});
+$('#noAccessSignOut').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
 /* ---------- Sign in and start ---------- */
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1704,6 +1822,7 @@ $('#signOutBtn').onclick = async () => { await sb.auth.signOut(); location.reloa
 function showView(which) {
   $('#authView').hidden = which !== 'auth';
   $('#configView').hidden = which !== 'config';
+  $('#noAccessView').hidden = which !== 'noaccess';
   $('#appView').hidden = which !== 'app';
   $('#tabbar').hidden = which !== 'app';
 }
@@ -1712,10 +1831,18 @@ async function startApp(session) {
   state.started = true;
   state.email = session.user.email || '';
   $('#whoAmI').textContent = state.email;
+  await loadMyRole();
+  if (!state.role || state.role === 'printer') {
+    $('#noAccessEmail').textContent = state.email;
+    showView('noaccess');
+    return;
+  }
+  applyRole();
   showView('app');
   const fromLink = location.hash === '#queue' ? 'queue' : null;
   if (fromLink) history.replaceState(null, '', location.pathname);
-  showTab(fromLink || (['people', 'queue', 'add', 'more'].includes(store.get('amaTab')) ? store.get('amaTab') : 'people'));
+  const lastTab = store.get('amaTab');
+  showTab(fromLink || (['people', 'queue', 'more'].includes(lastTab) || (lastTab === 'add' && can('edit')) ? lastTab : 'people'));
   renderList();
   await Promise.all([loadSettings(), loadPeople(), loadJobs(), loadStation()]);
   const reloadPeople = debounce(loadPeople, 400), reloadJobs = debounce(loadJobs, 300);

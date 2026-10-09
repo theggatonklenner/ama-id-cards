@@ -82,6 +82,23 @@ Get a notification when cards need approval or a print fails.
 
 Each person turns notifications on for their own phone. You're never notified about cards you sent yourself.
 
+## 7. User roles
+
+| Role | Can do |
+|---|---|
+| Admin | Everything, including card design, backups and managing users |
+| Approver | Add, edit and delete people, take photos, send and approve prints |
+| Photos | Add people, edit their details and take photos |
+| Viewer | Look only |
+| Print station | Only for the laptop's print station login |
+
+1. In Supabase, open **SQL Editor > New query**, paste the whole of `supabase/roles.sql`, and click **Run**. Everyone who can already sign in becomes an Admin.
+2. Update the `notify` Edge Function with the latest `supabase/functions/notify/index.ts` (it adds and removes logins for you).
+3. In the app, go to **More > Users** and set the print station's login to **Print station**.
+4. Add new people from **More > Users > Add a user** with their email, role and a starting password. You no longer need to create logins in Supabase.
+
+There is always at least one Admin; the app won't let the last one be removed or downgraded.
+
 ---
 
 ## Good to know

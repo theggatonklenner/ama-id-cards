@@ -7,6 +7,7 @@
 // It is called by:
 //   - the database, when a print job needs approval or fails (see supabase/notifications.sql)
 //   - the app, to get the public key (?init) and to send a test (?test, signed-in users only)
+//   - the app, for admins adding or removing logins (?users)
 
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
@@ -118,12 +119,73 @@ async function sendTo(subs, message, cfg) {
   return sent;
 }
 
+// ---- Admins adding and removing logins ----
+const ROLES = ['admin', 'approver', 'photos', 'viewer', 'printer'];
+async function callerEmail(req) {
+  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  const { data } = await db.auth.getUser(token);
+  return data && data.user && data.user.email ? data.user.email.toLowerCase() : null;
+}
+async function findUserByEmail(email) {
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await db.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const hit = data.users.find(u => (u.email || '').toLowerCase() === email);
+    if (hit) return hit;
+    if (data.users.length < 200) return null;
+  }
+  return null;
+}
+async function manageUsers(req) {
+  const me = await callerEmail(req);
+  if (!me) return json({ error: 'Sign in first.' }, 401);
+  const { data: mine } = await db.from('staff_roles').select('role').eq('email', me).maybeSingle();
+  if (!mine || mine.role !== 'admin') return json({ error: 'Only admins can manage users.' }, 403);
+  const body = await req.json().catch(() => ({}));
+  const email = String(body.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
+
+  if (body.action === 'create') {
+    const role = ROLES.includes(body.role) ? body.role : 'viewer';
+    const password = String(body.password || '');
+    const existing = await findUserByEmail(email);
+    if (!existing) {
+      if (password.length < 8) return json({ error: 'The password needs at least 8 characters.' }, 400);
+      const { error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+      if (error) return json({ error: error.message }, 400);
+    } else if (password) {
+      const { error } = await db.auth.admin.updateUserById(existing.id, { password });
+      if (error) return json({ error: error.message }, 400);
+    }
+    const { error: e2 } = await db.from('staff_roles').upsert({ email, role });
+    if (e2) return json({ error: e2.message }, 400);
+    return json({ ok: true, existed: !!existing });
+  }
+
+  if (body.action === 'remove') {
+    if (email === me) return json({ error: "You can't remove yourself." }, 400);
+    const { error: e1 } = await db.from('staff_roles').delete().eq('email', email);
+    if (e1) return json({ error: e1.message }, 400);
+    const user = await findUserByEmail(email);
+    if (user) {
+      await db.from('push_subscriptions').delete().eq('user_email', email);
+      const { error } = await db.auth.admin.deleteUser(user.id);
+      if (error) return json({ error: error.message }, 400);
+    }
+    return json({ ok: true });
+  }
+  return json({ error: 'Unknown action.' }, 400);
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const url = new URL(req.url);
-    const cfg = await getConfig();
+    // User management works even if notifications have not been set up
+    if (url.searchParams.has('users')) return await manageUsers(req);
 
+    const cfg = await getConfig();
     if (url.searchParams.has('init')) return json({ publicKey: cfg.vapid_public });
 
     if (url.searchParams.has('test')) {
@@ -163,6 +225,14 @@ Deno.serve(async req => {
 
     let { data: subs } = await db.from('push_subscriptions').select('*').eq(column, true);
     subs = (subs || []).filter(s => !(kind === 'approval' && s.user_email && s.user_email === job.created_by_email));
+    // Printer and approval alerts only go to people who can act on them
+    if (kind !== 'printed') {
+      const { data: roles, error: rolesErr } = await db.from('staff_roles').select('email, role');
+      if (!rolesErr && roles) {
+        const canPrint = new Set(roles.filter(r => r.role === 'admin' || r.role === 'approver').map(r => r.email));
+        subs = subs.filter(s => canPrint.has(String(s.user_email || '').toLowerCase()));
+      }
+    }
     const sent = await sendTo(subs, message, cfg);
     return json({ sent });
   } catch (e) {
