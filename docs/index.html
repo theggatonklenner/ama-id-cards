@@ -79,6 +79,11 @@
   .job-previews figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
   .job-previews img { width: 100%; aspect-ratio: 85.6 / 54; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.12); background: #fff; }
   .job-previews figcaption { font-size: 13px; color: var(--muted); }
+  .big { width: 100%; min-height: 52px; font-size: 17px; }
+  .pending { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); white-space: nowrap; vertical-align: middle; }
+  .quick-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .quick-grid img { width: 110px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 8px; box-shadow: 0 0 0 1px var(--line); }
+  .quick-fields { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   #fPhotoPreview { width: 60px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 6px; box-shadow: 0 0 0 1px var(--line); }
   button { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; white-space: nowrap; }
   button:hover { background: var(--hover); }
@@ -142,7 +147,7 @@
     h1 small { display: none; }
     header.top { align-items: center; margin-bottom: 14px; padding-block: 4px 12px; }
     #headerTools { width: 100%; }
-    #headerTools .pill { flex-basis: 100%; text-align: center; padding-block: 6px; }
+    #headerTools .pill { flex: 1 1 40%; text-align: center; padding-block: 6px; }
     #headerTools button { flex: 1 1 0; min-height: 38px; padding: 6px 8px; font-size: 14px; }
     main { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
     .col { display: contents; }
@@ -203,6 +208,7 @@
   <header class="top">
     <h1>AMA ID Cards<small>Australian Martial Arts Academy, dan certificate cards (CR80, 85.6 x 54 mm)</small></h1>
     <div class="row" id="headerTools" hidden>
+      <span class="pill" id="outboxPill" data-kind="warn" hidden></span>
       <span class="pill" id="stationPill">Print station: checking...</span>
       <button id="simpleBtn">Simple mode</button>
       <button id="backupBtn">Backup</button>
@@ -277,6 +283,7 @@
     <div class="col">
       <section class="panel" id="panelPeople">
         <div class="panel-head"><h2>People</h2><span class="count" id="countLabel"></span></div>
+        <button class="primary big" id="quickAddBtn">Take photo of a new person</button>
         <div class="toolbar">
           <input type="search" id="search" placeholder="Search by name" aria-label="Search by name">
           <select id="danFilter" aria-label="Filter by dan"><option value="">All dans</option></select>
@@ -324,6 +331,7 @@
 </div>
 
 <input type="file" id="hiddenPhoto" accept="image/*" hidden>
+<input type="file" id="quickCam" accept="image/*" capture="environment" hidden>
 <input type="file" id="hiddenBulkPhotos" accept="image/*" multiple hidden>
 <input type="file" id="hiddenCsv" accept=".csv,text/csv" hidden>
 <input type="file" id="hiddenSig" accept="image/*" hidden>
@@ -341,6 +349,7 @@
 <dialog id="cropDlg" class="wide">
   <h2>Position the photo</h2>
   <p class="hint">Drag to move. Pinch, scroll or use the slider to zoom. The banner shows what the dan banner will cover on the card.</p>
+  <p class="hint" id="cropStatus"></p>
   <div class="crop-stage"><canvas id="cropCanvas"></canvas></div>
   <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
   <div class="row" style="justify-content:flex-end"><button id="cropCancel">Cancel</button><button class="primary" id="cropOk">Use photo</button></div>
@@ -349,6 +358,19 @@
   <div class="panel-head"><h2>Check the cards</h2><span class="count" id="jobDlgMeta"></span></div>
   <div id="jobDlgBody" class="job-previews"></div>
   <div class="row" style="justify-content:flex-end"><button id="jobDlgClose">Close</button><button class="primary" id="jobDlgApprove" hidden>Approve and print</button></div>
+</dialog>
+<dialog id="quickDlg" class="wide">
+  <h2>New person</h2>
+  <div class="quick-grid">
+    <img id="qPhoto" alt="New photo">
+    <div class="quick-fields">
+      <div class="field"><label for="qName">Full name</label><input type="text" id="qName" autocomplete="off" autocapitalize="words"></div>
+      <div class="field"><label for="qDan">Dan</label><select id="qDan"></select></div>
+      <div class="field"><label for="qDob">Date of birth</label><input type="date" id="qDob"></div>
+    </div>
+  </div>
+  <p class="hint" id="qError" style="color:var(--danger)" hidden></p>
+  <div class="row" style="justify-content:flex-end"><button id="qCancel">Cancel</button><button id="qNext">Save and next</button><button class="primary" id="qSave">Save</button></div>
 </dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
@@ -464,6 +486,38 @@ async function processAsset(file, maxW, type) {
   return canvasBlob(c, type, 0.92);
 }
 
+/* ---------- Face detection (loaded on first use, then kept offline) ---------- */
+const FACE_LIB = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/';
+let faceLib = null;
+function loadFaceLib() {
+  if (!faceLib) {
+    faceLib = (async () => {
+      if (!window.faceapi) {
+        await new Promise((res, rej) => { const s = document.createElement('script'); s.src = FACE_LIB + 'dist/face-api.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+      }
+      const tf = window.faceapi.tf;
+      // Use the phone's graphics chip, or plain JavaScript if that is not available
+      try { await tf.setBackend('webgl'); } catch { await tf.setBackend('cpu'); }
+      await tf.ready();
+      await window.faceapi.nets.tinyFaceDetector.loadFromUri(FACE_LIB + 'model/');
+      return window.faceapi;
+    })().catch(e => { faceLib = null; throw e; });
+  }
+  return faceLib;
+}
+async function findFace(img) {
+  try {
+    const fa = await loadFaceLib();
+    const s = Math.min(1, 640 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const found = await fa.detectAllFaces(c, new fa.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 }));
+    if (!found.length) return null;
+    const best = found.reduce((a, b) => (b.box.width * b.box.height > a.box.width * a.box.height ? b : a)).box;
+    return { x: best.x / s, y: best.y / s, w: best.width / s, h: best.height / s };
+  } catch (e) { console.warn('Face detection unavailable', e); return null; }
+}
+
 /* ---------- Photo cropper ---------- */
 const CROP_W = 600, CROP_H = Math.round(600 * PHOTO.h / PHOTO.w);
 function cropPhoto(file) {
@@ -498,9 +552,24 @@ function cropPhoto(file) {
       zoomEl.value = z; draw();
     };
     zoomEl.value = 1;
+    let touched = false, closed = false;
+    const status = $('#cropStatus'); status.textContent = 'Finding the face...';
+    findFace(img).then(face => {
+      if (closed) return;
+      if (!face) { status.textContent = 'No face found. Position the photo by hand.'; return; }
+      status.textContent = '';
+      if (touched) return;
+      // Face fills about a third of the photo height, a little above the middle, clear of the banner
+      scale = Math.min(base * 4, Math.max(base, 0.30 * CROP_H / face.h));
+      z = scale / base; zoomEl.value = z;
+      ox = CROP_W / 2 - (face.x + face.w / 2) * scale;
+      oy = 0.45 * CROP_H - (face.y + face.h / 2) * scale;
+      draw();
+    });
     const pts = new Map(); let pinch = null;
     const toCanvas = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * CROP_W / r.width, (e.clientY - r.top) * CROP_H / r.height]; };
     cv.onpointerdown = e => {
+      touched = true;
       cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, toCanvas(e));
       if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z }; }
     };
@@ -513,11 +582,11 @@ function cropPhoto(file) {
       } else if (pts.size === 1) { ox += cur[0] - prev[0]; oy += cur[1] - prev[1]; draw(); }
     };
     cv.onpointerup = cv.onpointercancel = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
-    cv.onwheel = e => { e.preventDefault(); const [cx, cy] = toCanvas(e); setZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), cx, cy); };
-    zoomEl.oninput = () => setZoom(parseFloat(zoomEl.value));
+    cv.onwheel = e => { touched = true; e.preventDefault(); const [cx, cy] = toCanvas(e); setZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), cx, cy); };
+    zoomEl.oninput = () => { touched = true; setZoom(parseFloat(zoomEl.value)); };
     draw();
     const finish = async ok => {
-      dlg.close();
+      closed = true; dlg.close();
       cv.onpointerdown = cv.onpointermove = cv.onpointerup = cv.onpointercancel = cv.onwheel = null;
       if (!ok) return resolve(null);
       const out = document.createElement('canvas'); out.width = CROP_W; out.height = CROP_H;
@@ -529,6 +598,136 @@ function cropPhoto(file) {
     dlg.oncancel = e => { e.preventDefault(); finish(false); };
     dlg.showModal();
   });
+}
+
+/* ---------- Saving on the phone when there is no signal ---------- */
+const QUEUED_MSG = 'No signal. Saved on this phone and will upload automatically.';
+const localPhotos = new Map();   // person id -> photo waiting to upload (object URL)
+const Outbox = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    this.db = await new Promise((res, rej) => {
+      const r = indexedDB.open('amaOutbox', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'key' });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return this.db;
+  },
+  async tx(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('items', mode); const store = t.objectStore('items');
+      let out; const r = fn(store); if (r) r.onsuccess = () => { out = r.result; };
+      t.oncomplete = () => res(out); t.onerror = () => rej(t.error);
+    });
+  },
+  all() { return this.tx('readonly', s => s.getAll()).then(r => r || []); },
+  get(key) { return this.tx('readonly', s => s.get(key)); },
+  put(item) { return this.tx('readwrite', s => s.put(item)); },
+  del(key) { return this.tx('readwrite', s => s.delete(key)); }
+};
+function isNetworkError(err) {
+  return !navigator.onLine || /fetch|network|load failed|timed? ?out|offline|connection/i.test(errMsg(err));
+}
+function setLocalPhoto(id, blob) {
+  if (localPhotos.has(id)) URL.revokeObjectURL(localPhotos.get(id));
+  localPhotos.set(id, URL.createObjectURL(blob));
+}
+function clearLocalPhoto(id) {
+  if (localPhotos.has(id)) { URL.revokeObjectURL(localPhotos.get(id)); localPhotos.delete(id); }
+}
+async function queuePerson(p, photoBlob, oldPhoto) {
+  const prev = await Outbox.get(p.id).catch(() => null);
+  const person = { id: p.id, name: p.name, dob: p.dob || '', dan: p.dan || '', issued: p.issued || '', photo: p.photo || null };
+  const item = {
+    key: p.id, person,
+    photoBlob: photoBlob || (prev && prev.photoBlob) || null,
+    oldPhoto: (prev && prev.oldPhoto) || oldPhoto || null,
+    queuedAt: nowISO()
+  };
+  if (item.photoBlob && prev && prev.person && prev.person.photo && !photoBlob) person.photo = prev.person.photo;
+  await Outbox.put(item);
+  if (item.photoBlob) setLocalPhoto(p.id, item.photoBlob);
+  upsertLocal({ ...person, _pending: true });
+  renderOutboxPill();
+}
+function upsertLocal(p) {
+  const i = state.people.findIndex(x => x.id === p.id);
+  if (i >= 0) state.people[i] = { ...state.people[i], ...p }; else state.people.push(p);
+  state.people.sort(byName);
+  renderList(); renderPreview();
+}
+// Saves now when there is signal, otherwise keeps it on the phone and uploads later
+async function savePerson(p, photoBlob) {
+  const existing = state.people.find(x => x.id === p.id);
+  const oldPhoto = photoBlob && existing ? existing.photo : null;
+  const waiting = await Outbox.get(p.id).catch(() => null);
+  if (waiting || !navigator.onLine) { await queuePerson(p, photoBlob, oldPhoto); flushOutbox(); return 'queued'; }
+  try {
+    const row = { ...p };
+    delete row._pending;
+    if (photoBlob) row.photo = await uploadFile('photos', photoBlob, 'jpg', 'image/jpeg');
+    await putPerson(row);
+    if (oldPhoto) await removeFile(oldPhoto);
+    return 'saved';
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    await queuePerson(p, photoBlob, oldPhoto);
+    return 'queued';
+  }
+}
+async function applyOutbox() {
+  let items = [];
+  try { items = await Outbox.all(); } catch { return; }
+  for (const it of items) {
+    if (it.photoBlob && !localPhotos.has(it.key)) setLocalPhoto(it.key, it.photoBlob);
+    const i = state.people.findIndex(x => x.id === it.key);
+    const merged = { ...(i >= 0 ? state.people[i] : {}), ...it.person, _pending: true };
+    if (i >= 0) state.people[i] = merged; else state.people.push(merged);
+  }
+  state.people.sort(byName);
+  renderOutboxPill(items.length);
+}
+let flushing = false;
+async function flushOutbox() {
+  if (flushing || !navigator.onLine || !sb) return;
+  flushing = true;
+  let done = 0;
+  try {
+    const items = await Outbox.all();
+    for (const it of items) {
+      try {
+        if (it.photoBlob) {
+          it.person.photo = await uploadFile('photos', it.photoBlob, 'jpg', 'image/jpeg');
+          it.photoBlob = null;
+          await Outbox.put(it);              // remember the upload so it is never repeated
+        }
+        const { error } = await sb.from('people').upsert(toRow(it.person));
+        if (error) throw error;
+        if (it.oldPhoto && it.oldPhoto !== it.person.photo) await removeFile(it.oldPhoto);
+        await Outbox.del(it.key);
+        clearLocalPhoto(it.key);
+        done++;
+      } catch (err) {
+        if (isNetworkError(err)) break;     // still no signal; try again later
+        console.warn('Upload failed', err);
+        toast(`Could not upload ${it.person.name}: ${errMsg(err)}`, 7000);
+        break;
+      }
+    }
+  } catch (e) { console.warn(e); }
+  finally { flushing = false; }
+  if (done) { toast(`Uploaded ${done} saved ${done === 1 ? 'person' : 'people'} from this phone.`); await loadPeople(); }
+  else renderOutboxPill();
+}
+async function renderOutboxPill(known) {
+  let n = known;
+  if (n === undefined) { try { n = (await Outbox.all()).length; } catch { n = 0; } }
+  const pill = $('#outboxPill');
+  if (!navigator.onLine) { pill.hidden = false; pill.textContent = n ? `Offline: ${n} saved on this phone` : 'Offline'; }
+  else if (n) { pill.hidden = false; pill.textContent = `Uploading ${n}...`; }
+  else pill.hidden = true;
 }
 
 /* ---------- Dates ---------- */
@@ -554,9 +753,14 @@ const toRow = p => ({ id: p.id, name: p.name, dob: p.dob || null, dan: p.dan || 
 const fromRow = r => ({ id: r.id, name: r.name || '', dob: r.dob || '', dan: r.dan || '', issued: r.issued || '', photo: r.photo_path || null });
 
 async function loadPeople() {
-  const { data, error } = await sb.from('people').select('*').order('name').range(0, 4999);
-  if (error) return toast('Could not load people: ' + errMsg(error), 6000);
-  state.people = data.map(fromRow).sort(byName);
+  let data = null, error = null;
+  try { ({ data, error } = await sb.from('people').select('*').order('name').range(0, 4999)); } catch (e) { error = e; }
+  if (error) {
+    if (!isNetworkError(error)) toast('Could not load people: ' + errMsg(error), 6000);
+  } else {
+    state.people = data.map(fromRow);
+  }
+  await applyOutbox();
   renderList(); renderPreview();
 }
 async function putPerson(p) {
@@ -568,6 +772,7 @@ async function putPerson(p) {
   renderList(); renderPreview();
 }
 async function removePerson(p) {
+  await Outbox.del(p.id).catch(() => {}); clearLocalPhoto(p.id); renderOutboxPill();
   const { error } = await sb.from('people').delete().eq('id', p.id);
   if (error) throw error;
   state.people = state.people.filter(x => x.id !== p.id);
@@ -653,7 +858,7 @@ async function drawBack(ctx, p) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, CARD_W, CARD_H);
   ctx.textBaseline = 'alphabetic';
 
-  const photo = await fileImg(p.photo);
+  const photo = localPhotos.has(p.id) ? await safeImg(localPhotos.get(p.id)) : await fileImg(p.photo);
   if (photo) {
     ctx.drawImage(photo, PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
   } else {
@@ -751,17 +956,18 @@ function renderList() {
     if (p.id === state.selectedId) tr.className = 'active';
     tr.innerHTML = `
       <td><input type="checkbox" class="sel" aria-label="Select ${esc(p.name)}" ${state.checked.has(p.id) ? 'checked' : ''}></td>
-      <td>${p.photo ? '<img class="thumb" alt="">' : '<div class="nophoto">No photo</div>'}</td>
-      <td><strong>${esc(p.name)}</strong></td>
+      <td>${(p.photo || localPhotos.has(p.id)) ? '<img class="thumb" alt="">' : '<div class="nophoto">No photo</div>'}</td>
+      <td><strong>${esc(p.name)}</strong>${p._pending ? '<span class="pending">Not uploaded yet</span>' : ''}</td>
       <td class="num">${esc(fmtShort(p.dob))}</td>
       <td>${p.dan ? `<span class="dan">${esc(p.dan)}</span>` : ''}</td>
       <td><div class="actions">
         <button class="small primary" data-a="print">Print</button>
-        <button class="small" data-a="photo">${p.photo ? 'Change photo' : 'Add photo'}</button>
+        <button class="small" data-a="photo">${(p.photo || localPhotos.has(p.id)) ? 'Change photo' : 'Add photo'}</button>
         <button class="small" data-a="edit">Edit</button>
         <button class="small danger full-only" data-a="del">Delete</button>
       </div></td>`;
-    if (p.photo) { const img = tr.querySelector('img.thumb'); fileUrl(p.photo).then(u => { if (u) img.src = u; }); }
+    if (localPhotos.has(p.id)) tr.querySelector('img.thumb').src = localPhotos.get(p.id);
+    else if (p.photo) { const img = tr.querySelector('img.thumb'); fileUrl(p.photo).then(u => { if (u) img.src = u; }); }
     tr.addEventListener('click', async e => {
       const a = e.target.dataset.a;
       if (e.target.classList.contains('sel')) { e.target.checked ? state.checked.add(p.id) : state.checked.delete(p.id); updateCount(); return; }
@@ -976,18 +1182,53 @@ $('#personForm').addEventListener('submit', async e => {
     if (!data.name) return;
     const existing = state.people.find(p => p.id === state.editingId);
     const p = existing ? { ...existing, ...data } : { id: uuid(), photo: null, ...data };
-    let oldPhoto = null;
-    if (pendingPhoto) { oldPhoto = existing ? existing.photo : null; p.photo = await uploadFile('photos', pendingPhoto, 'jpg', 'image/jpeg'); }
-    await putPerson(p);
-    if (oldPhoto) await removeFile(oldPhoto);
+    const result = await savePerson(p, pendingPhoto);
     if (!existing) state.checked.add(p.id);
     state.selectedId = p.id;
-    toast(existing ? `Saved ${p.name}` : `Added ${p.name}`);
+    if (result === 'queued') toast(QUEUED_MSG, 6000); else toast(existing ? `Saved ${p.name}` : `Added ${p.name}`);
     resetForm(); renderList(); renderPreview();
   } catch (err) {
     toast('Could not save: ' + errMsg(err), 6000);
   } finally { btn.disabled = false; }
 });
+
+/* ---------- Quick add: photo first, then name and dan ---------- */
+let quickBlob = null;
+$('#qDan').innerHTML = $('#fDan').innerHTML;
+$('#quickAddBtn').onclick = () => { $('#quickCam').value = ''; $('#quickCam').click(); };
+$('#quickCam').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const blob = await cropPhoto(f);
+  if (!blob) return;
+  quickBlob = blob;
+  $('#qPhoto').src = URL.createObjectURL(blob);
+  $('#qName').value = ''; $('#qDob').value = ''; $('#qDan').value = ''; $('#qError').hidden = true;
+  $('#quickDlg').showModal();
+  setTimeout(() => $('#qName').focus(), 150);
+});
+function quickPerson() {
+  const name = $('#qName').value.trim(), dan = $('#qDan').value;
+  if (!name || !dan) { $('#qError').textContent = 'Enter a name and choose a dan.'; $('#qError').hidden = false; return null; }
+  return { id: uuid(), name, dan, dob: $('#qDob').value, issued: '', photo: null };
+}
+async function quickSave(p, blob) {
+  try {
+    const result = await savePerson(p, blob);
+    state.checked.add(p.id);
+    toast(result === 'queued' ? `${p.name}: ${QUEUED_MSG}` : `Added ${p.name}`, result === 'queued' ? 6000 : 3500);
+  } catch (err) { toast(`Could not save ${p.name}: ${errMsg(err)}`, 7000); }
+}
+$('#qSave').onclick = () => {
+  const p = quickPerson(); if (!p) return;
+  $('#quickDlg').close(); quickSave(p, quickBlob);
+};
+$('#qNext').onclick = () => {
+  const p = quickPerson(); if (!p) return;
+  $('#quickDlg').close();
+  quickSave(p, quickBlob);
+  $('#quickCam').value = ''; $('#quickCam').click();   // straight back to the camera
+};
+$('#qCancel').onclick = () => $('#quickDlg').close();
 
 /* ---------- Photos ---------- */
 async function setPhoto(p, file, croppedBlob) {
@@ -1002,7 +1243,11 @@ $('#hiddenPhoto').addEventListener('change', async e => {
   const cropped = await cropPhoto(file);
   if (!cropped) return;
   toast('Uploading photo...', 0);
-  try { await setPhoto(p, file, cropped); state.selectedId = p.id; renderPreview(); toast(`Photo saved for ${p.name}`); }
+  try {
+    const result = await savePerson({ ...p }, cropped);
+    state.selectedId = p.id; renderPreview();
+    toast(result === 'queued' ? QUEUED_MSG : `Photo saved for ${p.name}`, result === 'queued' ? 6000 : 3500);
+  }
   catch (err) { toast('The photo could not be uploaded: ' + errMsg(err), 6000); }
 });
 $('#bulkPhotoBtn').onclick = () => { $('#hiddenBulkPhotos').value = ''; $('#hiddenBulkPhotos').click(); };
@@ -1233,9 +1478,20 @@ async function startApp(session) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'print_jobs' }, reloadJobs)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'print_station' }, payload => { if (payload.new) { state.station = payload.new; renderStation(); } })
     .subscribe();
+  // Upload anything saved on this phone while there was no signal
+  flushOutbox();
+  window.addEventListener('online', () => { renderOutboxPill(); flushOutbox(); });
+  window.addEventListener('offline', () => renderOutboxPill());
+  setInterval(flushOutbox, 20000);
+  // Fetch the face finder in the background so it also works without signal later
+  setTimeout(() => loadFaceLib().catch(() => {}), 4000);
   // Safety net in case live updates drop (e.g. a phone waking from sleep)
   setInterval(() => { loadStation(); loadJobs(); }, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadPeople(); loadJobs(); loadStation(); } });
+}
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 (function boot() {
