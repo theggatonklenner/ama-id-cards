@@ -7,6 +7,7 @@
  *   node agent.js                  start the print station
  *   node agent.js --list-printers  show printer names (to fill in config.json)
  *   node agent.js --test           sign in, check the printer, then exit
+ *   node agent.js --mark-offline   tell the website the print station has stopped
  */
 
 const fs = require('fs');
@@ -16,7 +17,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { print, getPrinters } = require('pdf-to-printer');
 
 const BUCKET = 'cards';
-const HEARTBEAT_MS = 60 * 1000;
+const HEARTBEAT_MS = 15 * 1000;   // the website shows offline about 45 seconds after check-ins stop
 const POLL_MS = 20 * 1000;
 const LOG_FILE = path.join(__dirname, 'agent.log');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
@@ -88,6 +89,22 @@ async function main() {
   } catch (e) { log('Could not list printers:', errText(e)); }
 
   if (args.includes('--test')) { log('Test finished. Everything needed to print is set up.'); return; }
+
+  async function markOffline() {
+    await sb.from('print_station').upsert({ id: 1, last_seen: null, printer_name: config.printer, computer: os.hostname() });
+  }
+  if (args.includes('--mark-offline')) { await markOffline(); log('Marked the print station as stopped.'); return; }
+
+  // Show offline straight away when closed with Ctrl+C or the window is closed
+  let stopping = false;
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) {
+    process.on(sig, async () => {
+      if (stopping) return; stopping = true;
+      log('Stopping print station.');
+      try { await Promise.race([markOffline(), sleep(3000)]); } catch { /* exiting anyway */ }
+      process.exit(0);
+    });
+  }
 
   // Heartbeat so phones can see the print station is online
   async function heartbeat() {
@@ -172,7 +189,7 @@ async function main() {
 }
 
 process.on('unhandledRejection', e => log('Unexpected error:', errText(e)));
-const oneShot = process.argv.includes('--test') || process.argv.includes('--list-printers');
+const oneShot = ['--test', '--list-printers', '--mark-offline'].some(a => process.argv.includes(a));
 main()
   .then(() => { if (oneShot) process.exit(0); })
   .catch(e => { log('Stopped:', errText(e)); process.exit(1); });

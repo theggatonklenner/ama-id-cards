@@ -14,321 +14,381 @@
 <title>AMA ID Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&family=Carlito:wght@700&family=Barlow+Semi+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&family=Carlito:wght@700&family=Barlow+Semi+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <style>
-  /* Layout: tools column on the left; people, printing and the two-sided card preview on the right. Stacks on phones. */
+  /* Layout: an app shell. Header with status, one view at a time, tab bar at the bottom on phones
+     and under the header on wide screens. Colours from the AMA academy logo. */
   :root {
-    /* AMA academy logo colours: green ring, yellow, navy */
-    --bg: #f3f6f4; --surface: #ffffff; --fg: #16211b; --muted: #5a6b61; --line: #d7e2db;
-    --accent: #04794b; --on-accent: #ffffff; --gold: #f2d500; --on-gold: #1d1d1d; --info: #3a4181;
-    --danger: #b3261e; --ok: #04794b; --warn: #a35d00;
-    --hover: #e6f2ec;
+    --bg: #f3f6f4; --surface: #ffffff; --fg: #16211b; --muted: #5a6b61; --line: #dfe7e2;
+    --accent: #04794b; --on-accent: #ffffff; --accent-soft: #e3f2ea;
+    --gold: #f2d500; --on-gold: #1d1d1d; --info: #3a4181;
+    --danger: #b3261e; --ok: #04794b; --warn: #a35d00; --hover: #eef5f1;
+    --shadow: 0 1px 2px rgba(16,33,27,.06), 0 4px 14px rgba(16,33,27,.06);
     --font-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
     --font-body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+    --tabbar-h: 64px;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0e1612; --surface: #16211b; --fg: #e6efe9; --muted: #93a79b; --line: #2a3a31;
-      --accent: #3fbf7f; --on-accent: #06150d; --gold: #e8d23a; --on-gold: #1d1d1d; --info: #9aa3ea;
+      --bg: #0e1612; --surface: #16211b; --fg: #e6efe9; --muted: #93a79b; --line: #26352c;
+      --accent: #3fbf7f; --on-accent: #06150d; --accent-soft: #1b3326;
+      --gold: #e8d23a; --on-gold: #1d1d1d; --info: #9aa3ea;
       --danger: #f2867d; --ok: #5cd394; --warn: #f0b45a; --hover: #1c2b23;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
       color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.45; -webkit-tap-highlight-color: transparent; }
   [hidden] { display: none !important; }
   img { max-width: 100%; }
-  .wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 40px; }
-  header.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 6px 16px; border-bottom: 2px solid var(--gold); margin-bottom: 20px; }
-  h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: .01em; margin: 0; line-height: 1.1; }
-  h1 small { display: block; font-family: var(--font-body); font-weight: 400; font-size: 13px; color: var(--muted); letter-spacing: 0; margin-top: 4px; }
-  h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .01em; }
-  .pill { font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
-  .pill[data-kind="ok"] { color: var(--ok); border-color: var(--ok); }
-  .pill[data-kind="warn"] { color: var(--warn); border-color: var(--warn); }
-  .pill[data-kind="bad"] { color: var(--danger); border-color: var(--danger); }
-  .pill[data-kind="info"] { color: var(--info); border-color: var(--info); }
-  main { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start; }
-  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
-  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  label, .label { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-  input[type=text], input[type=email], input[type=password], input[type=date], input[type=search], textarea, select {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; color: var(--fg); background: var(--surface);
-  }
-  .toolbar select, .row select { width: auto; }
-  textarea { resize: vertical; line-height: 1.4; }
-  input[type=file] { font: inherit; font-size: 13px; color: var(--muted); max-width: 100%; }
+  button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  input[type=checkbox] { accent-color: var(--accent); }
-  dialog.wide { width: min(560px, calc(100% - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; padding: 16px; }
-  dialog.wide > * + * { margin-top: 12px; }
-  dialog.wide p { margin: 0; }
+  input[type=checkbox] { accent-color: var(--accent); width: 20px; height: 20px; }
+
+  /* ---------- App bar ---------- */
+  .appbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line);
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px; }
+  .appbar-inner { max-width: 820px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+  .brand img { width: 34px; height: 34px; border-radius: 8px; }
+  .brand h1 { font-family: var(--font-display); font-weight: 700; font-size: 22px; margin: 0; letter-spacing: .01em; white-space: nowrap; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); padding: 5px 10px; border-radius: 999px; background: var(--bg); white-space: nowrap; border: 0; cursor: pointer; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status[data-kind="ok"] .dot { background: var(--ok); }
+  .status[data-kind="bad"] .dot { background: var(--danger); }
+  .status[data-kind="warn"] .dot { background: var(--warn); }
+
+  /* ---------- Tabs ---------- */
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .tab { position: relative; border: 0; background: none; padding: 8px 4px 9px; height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .tab svg { width: 24px; height: 24px; }
+  .tab[aria-selected="true"] { color: var(--accent); }
+  .badge { position: absolute; top: 6px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+  @media (min-width: 900px) {
+    .tabbar { position: sticky; top: 61px; bottom: auto; border-top: 0; border-bottom: 1px solid var(--line); display: flex; justify-content: center; gap: 4px; padding: 0 16px; }
+    .tab { flex-direction: row; height: 48px; padding: 0 18px; font-size: 15px; gap: 8px; border-bottom: 2px solid transparent; }
+    .tab[aria-selected="true"] { border-bottom-color: var(--accent); }
+    .tab svg { width: 20px; height: 20px; }
+    .badge { position: static; }
+  }
+
+  /* ---------- Views ---------- */
+  main { max-width: 820px; margin: 0 auto; padding: 16px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 24px); }
+  @media (min-width: 900px) { main { padding-bottom: 48px; } }
+  .view { display: flex; flex-direction: column; gap: 14px; }
+  h2 { font-family: var(--font-display); font-weight: 700; font-size: 24px; margin: 0; letter-spacing: .01em; }
+  h3 { font-family: var(--font-display); font-weight: 600; font-size: 18px; margin: 0; }
+  .view-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  .card { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---------- Controls ---------- */
+  label, .label { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  input[type=text], input[type=email], input[type=password], input[type=date], input[type=search], textarea, select {
+    width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 16px; }
+  textarea { resize: vertical; line-height: 1.4; min-height: 0; }
+  input[type=search] { background: var(--surface); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+  .btn:hover { background: var(--hover); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { filter: brightness(1.07); }
+  .btn.danger { color: var(--danger); }
+  .btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .btn.ghost { border-color: transparent; background: none; }
+  .btn.big { min-height: 56px; font-size: 17px; width: 100%; }
+  .btn svg { width: 20px; height: 20px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > .grow { flex: 1 1 0; }
+  .hint { font-size: 14px; color: var(--muted); margin: 0; }
+  .filters { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+  .chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--gold); color: var(--on-gold); white-space: nowrap; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .tag.warn { color: var(--warn); }
+  .tag.muted { color: var(--muted); }
+
+  /* ---------- People list ---------- */
+  .people { list-style: none; margin: 0; padding: 0; background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .person { display: grid; grid-template-columns: auto 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .person:last-child { border-bottom: 0; }
+  .person:hover { background: var(--hover); }
+  .person.checked { background: var(--accent-soft); }
+  .person .pick { display: none; }
+  .selecting .person .pick { display: block; }
+  .person:not(.selecting *) { grid-template-columns: 48px minmax(0, 1fr) auto; }
+  .thumb { width: 48px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--hover); display: block; }
+  .nophoto { width: 48px; height: 64px; border-radius: 8px; border: 1.5px dashed var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .nophoto svg { width: 22px; height: 22px; }
+  .who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .who strong { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who .meta { font-size: 13px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-variant-numeric: tabular-nums; }
+  .empty { text-align: center; color: var(--muted); padding: 36px 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .empty svg { width: 40px; height: 40px; opacity: .6; }
+  .count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* Selection bar */
+  .selbar { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)); z-index: 19;
+    background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.08); padding: 10px 16px; }
+  .selbar-inner { max-width: 820px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto auto; gap: 6px 8px; align-items: center; }
+  .selbar .count { color: var(--fg); font-weight: 600; }
+  .sel-acts { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; }
+  @media (min-width: 900px) { .selbar-inner { grid-template-columns: auto auto auto 1fr; } .sel-acts { grid-column: auto; justify-self: end; grid-template-columns: repeat(3, auto); } }
+  @media (min-width: 900px) { .selbar { bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); } }
+  body.selecting main { padding-bottom: calc(var(--tabbar-h) + 140px); }
+
+  /* ---------- Queue ---------- */
+  .card.station { flex-direction: row; align-items: center; gap: 12px; }
+  .station .dot { width: 12px; height: 12px; }
+  .jobs { display: flex; flex-direction: column; gap: 10px; }
+  .job { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .job-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .job .names { font-weight: 700; overflow-wrap: anywhere; }
+  .job .meta { font-size: 13px; color: var(--muted); }
+  .job .err { font-size: 14px; color: var(--danger); }
+  .state { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor; }
+  .state[data-kind="warn"] { color: var(--warn); }
+  .state[data-kind="info"] { color: var(--info); }
+  .state[data-kind="bad"] { color: var(--danger); }
+  .state[data-kind="ok"] { color: var(--ok); }
+  .job .row .btn { flex: 1 1 auto; }
+
+  /* ---------- Add ---------- */
+  .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  #fPhotoPreview { width: 60px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 8px; }
+
+  /* ---------- More ---------- */
+  .group { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .group > summary, .group > .group-head { list-style: none; cursor: pointer; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary::after { content: ""; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s; margin-right: 4px; }
+  .group[open] > summary::after { transform: rotate(-135deg); }
+  .group-body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 16px; font-weight: 400; color: var(--fg); }
+  #settingsPreview { width: 100%; aspect-ratio: 85.6 / 54; border-radius: 12px; box-shadow: var(--shadow); background: #fff; }
+
+  /* ---------- Sheets and dialogs ---------- */
+  dialog { border: 0; border-radius: 18px; background: var(--surface); color: var(--fg); padding: 18px; width: min(560px, calc(100% - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(10, 20, 15, .5); }
+  dialog > * + * { margin-top: 14px; }
+  dialog p { margin: 0; }
+  @media (max-width: 640px) {
+    dialog.sheet { margin: auto 0 0; width: 100%; max-height: 92dvh; border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+  }
+  .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .close { border: 0; background: var(--bg); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .close svg { width: 18px; height: 18px; }
+  .p-head { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; }
+  .p-head .thumb, .p-head .nophoto { width: 84px; height: 112px; }
+  .p-name { font-family: var(--font-display); font-weight: 700; font-size: 24px; line-height: 1.15; overflow-wrap: anywhere; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 14px; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .card-preview { width: 100%; aspect-ratio: 85.6 / 54; border-radius: 12px; box-shadow: var(--shadow); background: #fff; display: block; }
+  .seg { display: inline-flex; background: var(--bg); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { border: 0; background: none; padding: 6px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+  .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .actions-grid .btn.primary { grid-column: 1 / -1; }
   .crop-stage { display: flex; justify-content: center; }
-  #cropCanvas { width: min(300px, 70vw); aspect-ratio: 600 / 806; border-radius: 8px; touch-action: none; cursor: grab; background: #fff; box-shadow: 0 0 0 1px var(--line); }
-  #cropCanvas:active { cursor: grabbing; }
+  #cropCanvas { width: min(300px, 70vw); aspect-ratio: 600 / 806; border-radius: 10px; touch-action: none; cursor: grab; background: #fff; box-shadow: 0 0 0 1px var(--line); }
   #cropZoom { width: 100%; accent-color: var(--accent); }
   .job-previews { display: flex; flex-direction: column; gap: 14px; }
   .job-previews figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
-  .job-previews img { width: 100%; aspect-ratio: 85.6 / 54; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.12); background: #fff; }
+  .job-previews img { width: 100%; aspect-ratio: 85.6 / 54; border-radius: 10px; box-shadow: var(--shadow); background: #fff; }
   .job-previews figcaption { font-size: 13px; color: var(--muted); }
-  .big { width: 100%; min-height: 52px; font-size: 17px; }
-  .pending { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); white-space: nowrap; vertical-align: middle; }
   .quick-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: start; }
-  .quick-grid img { width: 110px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 8px; box-shadow: 0 0 0 1px var(--line); }
+  .quick-grid img { width: 110px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 10px; }
   .quick-fields { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  #fPhotoPreview { width: 60px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 6px; box-shadow: 0 0 0 1px var(--line); }
-  button { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; white-space: nowrap; }
-  button:hover { background: var(--hover); }
-  button:disabled { opacity: .5; cursor: default; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-  button.primary:hover { filter: brightness(1.08); }
-  button.danger { color: var(--danger); }
-  button.danger-solid { background: var(--danger); border-color: var(--danger); color: var(--surface); font-weight: 600; }
-  button.small { font-size: 13px; padding: 5px 10px; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .hint { font-size: 13px; color: var(--muted); margin: 0; }
-  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .toolbar input[type=search] { flex: 1 1 180px; width: auto; }
-  .count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  th { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  #rows tr { cursor: pointer; }
-  #rows tr:hover td { background: var(--hover); }
-  tr.active td { background: var(--hover); box-shadow: inset 0 -2px 0 var(--accent); }
-  .dan { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--gold); color: var(--on-gold); white-space: nowrap; }
-  .thumb { width: 36px; height: 48px; object-fit: cover; border-radius: 4px; display: block; background: var(--hover); }
-  .nophoto { width: 36px; height: 48px; border-radius: 4px; border: 1px dashed var(--muted); font-size: 9px; color: var(--muted); display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; }
-  .actions { display: flex; gap: 6px; flex-wrap: nowrap; }
-  .empty { padding: 24px 12px; text-align: center; color: var(--muted); }
-  .previews { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  @media (max-width: 640px) { .previews { grid-template-columns: minmax(0, 1fr); } }
-  .side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .previews canvas { width: 100%; max-width: 100%; aspect-ratio: 85.6 / 54; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.12); display: block; background: #fff; }
-  .note { border-left: 3px solid var(--gold); padding: 8px 12px; font-size: 13px; color: var(--muted); }
-  .alert { border-left: 3px solid var(--warn); padding: 8px 12px; font-size: 14px; }
-  details summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 19px; }
-  details[open] summary { margin-bottom: 12px; }
-  details .stack { display: flex; flex-direction: column; gap: 12px; }
-  .jobs { display: flex; flex-direction: column; }
-  .job { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center; }
-  .job:last-child { border-bottom: 0; }
-  .job .who { min-width: 0; }
-  .job .names { font-weight: 600; overflow-wrap: anywhere; }
-  .job .meta { font-size: 13px; color: var(--muted); }
-  .job .err { font-size: 13px; color: var(--danger); grid-column: 1 / -1; }
-  .job .btns { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
-  .switch { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--fg); text-transform: none; letter-spacing: 0; font-weight: 400; }
-  .switch input { width: 18px; height: 18px; }
-  #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 10; }
-  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 20px; max-width: min(420px, calc(100% - 32px)); }
-  dialog::backdrop { background: rgba(10, 20, 30, .45); }
-  dialog p { margin: 0 0 16px; }
-  .auth { max-width: 380px; margin: 10vh auto 0; }
-  @media (prefers-reduced-motion: no-preference) { button { transition: background .12s; } }
-  .sel-bar { display: none; }
-  @media (max-width: 700px) {
-    body { font-size: 16px; }
-    input[type=text], input[type=email], input[type=password], input[type=date], input[type=search], textarea, select { font-size: 16px; padding: 10px 12px; }
-    button { min-height: 42px; padding: 9px 14px; font-size: 15px; }
-    button.small { min-height: 38px; font-size: 14px; }
-    .wrap { padding-block: 10px 32px; }
-    h1 { font-size: 24px; }
-    h1 small { display: none; }
-    header.top { align-items: center; margin-bottom: 14px; padding-block: 4px 12px; }
-    #headerTools { width: 100%; }
-    #headerTools .pill { flex: 1 1 40%; text-align: center; padding-block: 6px; }
-    #headerTools button { flex: 1 1 0; min-height: 38px; padding: 6px 8px; font-size: 14px; }
-    main { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
-    .col { display: contents; }
-    #panelPeople { order: 1; } #panelPrinting { order: 2; } #panelAdd { order: 3; }
-    #panelPreview { order: 4; } #panelBulk { order: 5; } #panelSettings { order: 6; }
-    .panel { padding: 14px; }
-    .toolbar input[type=search] { flex-basis: 100%; }
-    .toolbar select { flex: 1 1 auto; }
-    .toolbar button { flex: 1 1 auto; }
-    /* People list as cards */
-    .table-wrap { overflow: visible; }
-    .table-wrap thead { display: none; }
-    .table-wrap table, .table-wrap tbody { display: block; }
-    #rows tr { display: grid; grid-template-columns: 26px 48px auto minmax(0, 1fr);
-      grid-template-areas: "chk photo name name" "chk photo dob dan" "act act act act";
-      gap: 2px 10px; padding: 12px 6px; border-bottom: 1px solid var(--line); align-items: center; border-radius: 8px; }
-    #rows td { display: block; padding: 0; border: 0; background: none !important; box-shadow: none !important; }
-    #rows td:nth-child(1) { grid-area: chk; }
-    #rows td:nth-child(2) { grid-area: photo; }
-    #rows td:nth-child(3) { grid-area: name; min-width: 0; overflow-wrap: anywhere; }
-    #rows td:nth-child(4) { grid-area: dob; color: var(--muted); font-size: 14px; }
-    #rows td:nth-child(5) { grid-area: dan; justify-self: start; }
-    #rows td:nth-child(6) { grid-area: act; margin-top: 8px; }
-    #rows tr.active { background: var(--hover); }
-    #rows .sel { width: 22px; height: 22px; }
-    #rows .thumb, #rows .nophoto { width: 48px; height: 64px; }
-    .actions { flex-wrap: wrap; }
-    .actions button { flex: 1 1 auto; }
-    #panelPeople > .row button, #panelPeople > .row select { flex: 1 1 auto; }
-    .job .btns button { flex: 1 1 auto; }
-    .sel-bar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; gap: 10px; align-items: center;
-      padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--surface);
-      border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.12); }
-    .sel-bar .count { flex: 1; font-size: 15px; color: var(--fg); }
-    body.has-sel-bar { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
-    body.has-sel-bar #toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
-  }
-  /* Simple mode: just find a person, print, add someone, approve jobs */
-  body.simple .full-only,
-  body.simple #panelBulk, body.simple #panelSettings, body.simple #panelPreview,
-  body.simple #backupBtn, body.simple #restoreBtn,
-  body.simple #selectAllBtn, body.simple #selectNoneBtn, body.simple #deleteSelBtn,
-  body.simple #panelPeople > .row, body.simple .approval-toggle,
-  body.simple #rows td:nth-child(1), body.simple thead th:first-child, body.simple #selBar { display: none !important; }
-  body.simple #simpleBtn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  body.simple #rows .actions button { font-size: 16px; min-height: 44px; padding-inline: 16px; }
-  body.simple .job .btns button { font-size: 16px; min-height: 44px; }
-  @media (max-width: 700px) {
-    body.simple #rows tr { grid-template-columns: 48px auto minmax(0, 1fr);
-      grid-template-areas: "photo name name" "photo dob dan" "act act act"; }
-    body.simple.has-sel-bar { padding-bottom: env(safe-area-inset-bottom, 0px); }
-    body.simple.has-sel-bar #toast { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
-  }
+  .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .dlg-actions .btn { flex: 1 1 auto; }
+  @media (min-width: 641px) { .dlg-actions .btn { flex: 0 0 auto; } }
+
+  #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 14px);
+    max-width: calc(100% - 32px); background: var(--fg); color: var(--bg); padding: 11px 16px; border-radius: 12px; font-size: 15px; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 40; }
+  body.selecting #toast { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 130px); }
+  @media (min-width: 900px) { #toast { bottom: 24px; } }
+
+  .auth { max-width: 380px; margin: 12vh auto 0; padding: 0 16px; }
+  @media (prefers-reduced-motion: no-preference) { .btn, .tab, .person { transition: background .12s, color .12s; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <h1>AMA ID Cards<small>Australian Martial Arts Academy, dan certificate cards (CR80, 85.6 x 54 mm)</small></h1>
-    <div class="row" id="headerTools" hidden>
-      <span class="pill" id="outboxPill" data-kind="warn" hidden></span>
-      <span class="pill" id="stationPill">Print station: checking...</span>
-      <button id="simpleBtn">Simple mode</button>
-      <button id="backupBtn">Backup</button>
-      <button id="restoreBtn">Restore</button>
-      <button id="signOutBtn" title="">Sign out</button>
-    </div>
-  </header>
 
-  <!-- Sign in -->
-  <section class="panel auth" id="authView" hidden>
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand"><img src="icon-192.png" alt=""><h1>AMA ID Cards</h1></div>
+    <button class="status" id="outboxPill" data-kind="warn" hidden><span class="dot"></span><span id="outboxText"></span></button>
+    <button class="status" id="stationPill" hidden><span class="dot"></span><span id="stationShort">Printer</span></button>
+  </div>
+</header>
+
+<nav class="tabbar" id="tabbar" role="tablist" hidden>
+  <button class="tab" role="tab" data-view="people" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg>People</button>
+  <button class="tab" role="tab" data-view="queue" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>Print queue<span class="badge" id="queueBadge" hidden></span></button>
+  <button class="tab" role="tab" data-view="add" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Add</button>
+  <button class="tab" role="tab" data-view="more" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>More</button>
+</nav>
+
+<!-- Sign in -->
+<section class="auth" id="authView" hidden>
+  <div class="card">
     <h2>Sign in</h2>
-    <form id="loginForm" class="col" style="gap:12px">
+    <form id="loginForm" class="view" style="gap:12px">
       <div class="field"><label for="loginEmail">Email</label><input type="email" id="loginEmail" autocomplete="username" required></div>
       <div class="field"><label for="loginPassword">Password</label><input type="password" id="loginPassword" autocomplete="current-password" required></div>
       <p class="hint" id="loginError" style="color:var(--danger)" hidden></p>
-      <div class="row"><button type="submit" class="primary" id="loginBtn">Sign in</button></div>
+      <button type="submit" class="btn primary big" id="loginBtn">Sign in</button>
       <p class="hint">Accounts are added by the administrator in Supabase.</p>
+    </form>
+  </div>
+</section>
+
+<section class="auth" id="configView" hidden>
+  <div class="card"><h2>Almost there</h2><p>This site is not connected to the database yet. Put your Supabase project URL and key in <strong>config.js</strong>.</p></div>
+</section>
+
+<main id="appView" hidden>
+
+  <!-- ===== People ===== -->
+  <section class="view" id="view-people">
+    <div class="view-head"><h2>People</h2><span class="count" id="countLabel"></span></div>
+    <input type="search" id="search" placeholder="Search by name" aria-label="Search by name">
+    <div class="filters">
+      <select id="danFilter" aria-label="Filter by dan"><option value="">All dans</option></select>
+      <select id="photoFilter" aria-label="Filter by photo"><option value="">Any photo</option></select>
+      <button class="btn" id="selectBtn">Select</button>
+    </div>
+    <ul class="people" id="people"></ul>
+    <div class="empty" id="emptyMsg" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+      <span id="emptyText">No one here yet.</span>
+      <button class="btn primary" id="emptyAddBtn">Add the first person</button>
+    </div>
+  </section>
+
+  <!-- ===== Print queue ===== -->
+  <section class="view" id="view-queue" hidden>
+    <div class="view-head"><h2>Print queue</h2></div>
+    <div class="card station">
+      <span class="dot" id="stationDot"></span>
+      <div><strong id="stationTitle">Checking the printer...</strong><div class="hint" id="stationText"></div></div>
+    </div>
+    <div class="jobs" id="jobs"></div>
+    <div class="empty" id="jobsEmpty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>
+      Nothing waiting to print.
+    </div>
+  </section>
+
+  <!-- ===== Add ===== -->
+  <section class="view" id="view-add" hidden>
+    <div class="view-head"><h2>Add a person</h2></div>
+    <button class="btn primary big" id="quickAddBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      Take their photo
+    </button>
+    <p class="hint">Takes the photo first, then asks for their name and dan. Use "Save and next" to go straight to the next person.</p>
+    <div class="divider">or type it in</div>
+    <form id="personForm" class="card">
+      <div class="field"><label for="fName">Full name</label><input type="text" id="fName" required autocomplete="off" autocapitalize="words"></div>
+      <div class="field"><label for="fDan">Dan</label>
+        <select id="fDan" required><option value="">Choose dan</option><option>1st Dan</option><option>2nd Dan</option><option>3rd Dan</option><option>4th Dan</option><option>5th Dan</option><option>6th Dan</option><option>7th Dan</option><option>8th Dan</option><option>9th Dan</option></select>
+      </div>
+      <div class="field"><label for="fDob">Date of birth</label><input type="date" id="fDob"></div>
+      <div class="field"><label for="fIssued">Issued date</label><input type="date" id="fIssued"><p class="hint">Leave blank to use the default.</p></div>
+      <div class="field"><label for="fPhoto">Photo (optional)</label>
+        <div class="row"><input type="file" id="fPhoto" accept="image/*" class="grow"><img id="fPhotoPreview" alt="Chosen photo" hidden></div>
+      </div>
+      <button type="submit" class="btn primary" id="submitBtn">Add person</button>
     </form>
   </section>
 
-  <!-- Setup missing -->
-  <section class="panel auth" id="configView" hidden>
-    <h2>Almost there</h2>
-    <p>This page is not connected to your database yet. Open <strong>config.js</strong> and paste in your Supabase project URL and anon key, then upload it again.</p>
+  <!-- ===== More ===== -->
+  <section class="view" id="view-more" hidden>
+    <div class="view-head"><h2>More</h2></div>
+
+    <details class="group" open>
+      <summary>Printing</summary>
+      <div class="group-body">
+        <label class="switch">Jobs need approval before they print <input type="checkbox" id="requireApproval"></label>
+        <div class="field"><label for="sides">Print</label>
+          <select id="sides"><option value="both">Both sides (front then back)</option><option value="back">Personal side only</option></select>
+        </div>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Card design</summary>
+      <div class="group-body">
+        <canvas id="settingsPreview" width="1011" height="638"></canvas>
+        <div class="field"><label for="sIssued">Default issued date</label><input type="date" id="sIssued"></div>
+        <div class="field"><label for="sCert">Certificate text</label><textarea id="sCert" rows="4"></textarea><p class="hint">One line per card line. {dan} becomes the person's dan.</p></div>
+        <div class="field"><label for="sSign">Signatory</label><textarea id="sSign" rows="3"></textarea></div>
+        <p class="hint" id="sigMissing" style="color:var(--warn)" hidden>No signature image yet. Upload it below.</p>
+        <div class="row"><span class="label grow">Signature</span><button class="btn" id="sigBtn">Upload</button><button class="btn danger" id="sigReset">Remove</button></div>
+        <div class="row"><span class="label grow">Front side</span><button class="btn" id="frontBtn">Replace</button><button class="btn" id="frontReset">Original</button></div>
+        <button class="btn" id="resetText">Reset text to original</button>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Import and export</summary>
+      <div class="group-body">
+        <div class="row"><button class="btn grow" id="exportListBtn">Export people list (CSV)</button></div>
+        <p class="hint">Exports the people shown in People, using the current search and filters.</p>
+        <div class="row"><button class="btn grow" id="csvBtn">Import CSV</button><button class="btn grow" id="csvTemplateBtn">CSV template</button></div>
+        <p class="hint">CSV columns: name, dob, dan, issued.</p>
+        <div class="row"><button class="btn grow" id="bulkPhotoBtn">Match photos by file name</button></div>
+        <p class="hint">Name each photo after the person, e.g. jane-smith.jpg.</p>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Backup</summary>
+      <div class="group-body">
+        <div class="row"><button class="btn grow" id="backupBtn">Download backup</button><button class="btn grow" id="restoreBtn">Restore</button></div>
+        <p class="hint">A backup includes everyone, their photos and the card settings.</p>
+      </div>
+    </details>
+
+    <div class="group">
+      <div class="group-head"><span>Account</span></div>
+      <div class="group-body">
+        <p class="hint">Signed in as <strong id="whoAmI"></strong></p>
+        <button class="btn danger" id="signOutBtn">Sign out</button>
+      </div>
+    </div>
   </section>
+</main>
 
-  <main id="appView" hidden>
-    <div class="col">
-      <section class="panel" id="panelAdd">
-        <h2 id="formTitle">Add person</h2>
-        <form id="personForm" class="col" style="gap:12px">
-          <div class="field"><label for="fName">Full name</label><input type="text" id="fName" required autocomplete="off"></div>
-          <div class="field"><label for="fDob">Date of birth</label><input type="date" id="fDob"></div>
-          <div class="field"><label for="fDan">Dan</label>
-            <select id="fDan" required><option value="">Choose dan</option><option>1st Dan</option><option>2nd Dan</option><option>3rd Dan</option><option>4th Dan</option><option>5th Dan</option><option>6th Dan</option><option>7th Dan</option><option>8th Dan</option><option>9th Dan</option></select>
-          </div>
-          <div class="field"><label for="fIssued">Issued date</label><input type="date" id="fIssued"><p class="hint">Leave blank to use the default issued date.</p></div>
-          <div class="field"><label for="fPhoto">Photo</label><input type="file" id="fPhoto" accept="image/*"><img id="fPhotoPreview" alt="Chosen photo" hidden><p class="hint">Optional. On a phone you can take the photo with the camera.</p></div>
-          <div class="row">
-            <button type="submit" class="primary" id="submitBtn">Add person</button>
-            <button type="button" id="cancelEdit" hidden>Cancel</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="panel" id="panelBulk">
-        <h2>Bulk import</h2>
-        <p class="hint">Load a spreadsheet saved as CSV with the columns name, dob, dan, issued. Issued can be left blank.</p>
-        <div class="row">
-          <button id="csvBtn">Import CSV</button>
-          <button id="csvTemplateBtn">Get CSV template</button>
-        </div>
-        <p class="hint">Add many photos at once. Name each file after the person, e.g. jane-smith.jpg.</p>
-        <div class="row"><button id="bulkPhotoBtn">Match photos</button></div>
-      </section>
-
-      <section class="panel" id="panelSettings">
-        <details>
-          <summary>Card settings</summary>
-          <div class="stack">
-            <div class="field"><label for="sIssued">Default issued date</label><input type="date" id="sIssued"><p class="hint">Used on every card unless a person has their own.</p></div>
-            <div class="field"><label for="sCert">Certificate text</label><textarea id="sCert" rows="4"></textarea><p class="hint">One line per card line. {dan} is replaced with the person's dan.</p></div>
-            <div class="field"><label for="sSign">Signatory</label><textarea id="sSign" rows="3"></textarea></div>
-            <div class="field"><span class="label">Signature image</span><div class="row"><button id="sigBtn">Upload signature</button><button id="sigReset" class="danger">Remove</button></div></div>
-            <div class="field"><span class="label">Front side</span><div class="row"><button id="frontBtn">Replace</button><button id="frontReset">Use original</button></div></div>
-            <div class="row"><button id="resetText">Reset text to original</button></div>
-          </div>
-        </details>
-      </section>
+<!-- Selection bar -->
+<div class="selbar" id="selBar" hidden>
+  <div class="selbar-inner">
+    <span class="count" id="selCount">0 selected</span>
+    <button class="btn ghost" id="selAllBtn">Select all shown</button>
+    <button class="btn ghost" id="selDoneBtn">Done</button>
+    <div class="sel-acts">
+      <button class="btn primary" id="selPrintBtn">Print</button>
+      <button class="btn" id="selPdfBtn">PDF</button>
+      <button class="btn danger" id="selDeleteBtn">Delete</button>
     </div>
-
-    <div class="col">
-      <section class="panel" id="panelPeople">
-        <div class="panel-head"><h2>People</h2><span class="count" id="countLabel"></span></div>
-        <button class="primary big" id="quickAddBtn">Take photo of a new person</button>
-        <div class="toolbar">
-          <input type="search" id="search" placeholder="Search by name" aria-label="Search by name">
-          <select id="danFilter" aria-label="Filter by dan"><option value="">All dans</option></select>
-          <select id="photoFilter" aria-label="Filter by photo"><option value="">Any photo</option><option value="none">No photo</option><option value="has">Has photo</option></select>
-          <button id="selectAllBtn">Select all shown</button>
-          <button id="selectNoneBtn">Select none</button>
-          <button id="deleteSelBtn" class="danger">Delete selected</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th></th><th>Photo</th><th>Name</th><th>DOB</th><th>Dan</th><th></th></tr></thead>
-            <tbody id="rows"></tbody>
-          </table>
-          <div id="emptyMsg" class="empty">No one added yet. Add a person on the left, import a CSV, or restore a backup from the old version.</div>
-        </div>
-        <div class="row">
-          <select id="sides" aria-label="Sides to include">
-            <option value="both">Both sides (front then back)</option>
-            <option value="back">Personal side only</option>
-          </select>
-          <button id="printSelBtn" class="primary">Send selected to printer</button>
-          <button id="exportSelBtn">Download PDF</button>
-          <button id="exportListBtn">Export list (CSV)</button>
-        </div>
-      </section>
-
-      <section class="panel" id="panelPrinting">
-        <div class="panel-head"><h2>Waiting to print <span class="pill" id="waitCount" hidden></span></h2><span class="count" id="stationText"></span></div>
-        <label class="switch approval-toggle"><input type="checkbox" id="requireApproval"> Jobs need approval before they print</label>
-        <div class="jobs" id="jobs"></div>
-        <div id="jobsEmpty" class="empty">Nothing waiting to print.</div>
-      </section>
-
-      <section class="panel" id="panelPreview">
-        <div class="panel-head"><h2>Preview</h2><span class="count" id="previewName"></span></div>
-        <p class="alert" id="sigMissing" hidden>No signature image yet. Upload it under Card settings.</p>
-        <div class="previews">
-          <div class="side"><span class="label">Front</span><canvas id="previewFront" width="1011" height="638"></canvas></div>
-          <div class="side"><span class="label">Back</span><canvas id="previewBack" width="1011" height="638"></canvas></div>
-        </div>
-        <div class="row"><button id="exportOneBtn">Download this card</button><button id="printOneBtn">Print this card</button></div>
-        <div class="note">Printing goes to the PPC ID 4000 through the print station on the laptop. "Download PDF" is there if you need to print by hand: set the card size to CR80 and scaling to 100%.</div>
-      </section>
-    </div>
-  </main>
+  </div>
 </div>
 
 <input type="file" id="hiddenPhoto" accept="image/*" hidden>
@@ -339,29 +399,61 @@
 <input type="file" id="hiddenFront" accept="image/*" hidden>
 <input type="file" id="hiddenRestore" accept=".json,application/json" hidden>
 
-<dialog id="askDlg">
-  <p id="askMsg"></p>
-  <div class="row" style="justify-content:flex-end">
-    <button id="askCancel">Cancel</button>
-    <button id="askOk" class="danger-solid">Delete</button>
+<!-- Person sheet -->
+<dialog id="personDlg" class="sheet">
+  <div class="sheet-head">
+    <div class="p-head" style="flex:1">
+      <div id="pPhoto"></div>
+      <div>
+        <div class="p-name" id="pName"></div>
+        <div id="pDan" style="margin-top:6px"></div>
+        <dl class="facts" style="margin:8px 0 0">
+          <dt>Born</dt><dd id="pDob"></dd>
+          <dt>Issued</dt><dd id="pIssued"></dd>
+        </dl>
+      </div>
+    </div>
+    <button class="close" id="pClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="row" style="justify-content:space-between">
+    <span class="label">Card</span>
+    <div class="seg" role="group" aria-label="Card side"><button id="pSideBack" aria-pressed="true">Back</button><button id="pSideFront" aria-pressed="false">Front</button></div>
+  </div>
+  <canvas class="card-preview" id="pCard" width="1011" height="638"></canvas>
+  <div class="actions-grid">
+    <button class="btn primary big" id="pPrint">Print card</button>
+    <button class="btn" id="pPhotoBtn">Change photo</button>
+    <button class="btn" id="pEdit">Edit details</button>
+    <button class="btn" id="pPdf">Download PDF</button>
+    <button class="btn danger" id="pDelete">Delete</button>
   </div>
 </dialog>
-<div class="sel-bar" id="selBar" hidden><span class="count" id="selBarCount"></span><button id="selBarClear">Clear</button><button class="primary" id="selBarPrint">Send to printer</button></div>
-<dialog id="cropDlg" class="wide">
-  <h2>Position the photo</h2>
-  <p class="hint">Drag to move. Pinch, scroll or use the slider to zoom. The banner shows what the dan banner will cover on the card.</p>
+
+<!-- Edit details -->
+<dialog id="editDlg" class="sheet">
+  <div class="sheet-head"><h3>Edit details</h3></div>
+  <form id="editForm" class="view" style="gap:12px">
+    <div class="field"><label for="eName">Full name</label><input type="text" id="eName" required autocomplete="off" autocapitalize="words"></div>
+    <div class="field"><label for="eDan">Dan</label><select id="eDan" required></select></div>
+    <div class="field"><label for="eDob">Date of birth</label><input type="date" id="eDob"></div>
+    <div class="field"><label for="eIssued">Issued date</label><input type="date" id="eIssued"><p class="hint">Leave blank to use the default.</p></div>
+    <div class="dlg-actions"><button type="button" class="btn" id="eCancel">Cancel</button><button type="submit" class="btn primary" id="eSave">Save</button></div>
+  </form>
+</dialog>
+
+<!-- Photo cropper -->
+<dialog id="cropDlg">
+  <h3>Position the photo</h3>
+  <p class="hint">Drag to move. Pinch, scroll or use the slider to zoom. The banner shows what the dan banner covers.</p>
   <p class="hint" id="cropStatus"></p>
   <div class="crop-stage"><canvas id="cropCanvas"></canvas></div>
   <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
-  <div class="row" style="justify-content:flex-end"><button id="cropCancel">Cancel</button><button class="primary" id="cropOk">Use photo</button></div>
+  <div class="dlg-actions"><button class="btn" id="cropCancel">Cancel</button><button class="btn primary" id="cropOk">Use photo</button></div>
 </dialog>
-<dialog id="jobDlg" class="wide">
-  <div class="panel-head"><h2>Check the cards</h2><span class="count" id="jobDlgMeta"></span></div>
-  <div id="jobDlgBody" class="job-previews"></div>
-  <div class="row" style="justify-content:flex-end"><button id="jobDlgClose">Close</button><button class="primary" id="jobDlgApprove" hidden>Approve and print</button></div>
-</dialog>
-<dialog id="quickDlg" class="wide">
-  <h2>New person</h2>
+
+<!-- Quick add -->
+<dialog id="quickDlg" class="sheet">
+  <h3>New person</h3>
   <div class="quick-grid">
     <img id="qPhoto" alt="New photo">
     <div class="quick-fields">
@@ -371,7 +463,21 @@
     </div>
   </div>
   <p class="hint" id="qError" style="color:var(--danger)" hidden></p>
-  <div class="row" style="justify-content:flex-end"><button id="qCancel">Cancel</button><button id="qNext">Save and next</button><button class="primary" id="qSave">Save</button></div>
+  <div class="dlg-actions"><button class="btn" id="qCancel">Cancel</button><button class="btn" id="qNext">Save and next</button><button class="btn primary" id="qSave">Save</button></div>
+</dialog>
+
+<!-- Job preview -->
+<dialog id="jobDlg" class="sheet">
+  <div class="sheet-head"><div><h3>Check the cards</h3><div class="hint" id="jobDlgMeta"></div></div>
+    <button class="close" id="jobDlgX" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div id="jobDlgBody" class="job-previews"></div>
+  <div class="dlg-actions"><button class="btn" id="jobDlgClose">Close</button><button class="btn primary" id="jobDlgApprove" hidden>Approve and print</button></div>
+</dialog>
+
+<!-- Confirm -->
+<dialog id="askDlg">
+  <p id="askMsg"></p>
+  <div class="dlg-actions"><button class="btn" id="askCancel">Cancel</button><button class="btn danger-solid" id="askOk">Delete</button></div>
 </dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
@@ -388,7 +494,9 @@ const NAME_FONT = 'Carlito, Calibri, Arial, sans-serif';
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAN_LEVELS = ['1st Dan','2nd Dan','3rd Dan','4th Dan','5th Dan','6th Dan','7th Dan','8th Dan','9th Dan'];
 const PHOTO = { x: 157.2 * K, y: 22.7 * K, w: 82.2 * K, h: 110.4 * K };
-const STATION_ONLINE_MS = 150 * 1000;
+const STATION_ONLINE_MS = 45 * 1000;      // the print station checks in every 15 seconds
+const WAITING = ['pending', 'approved', 'printing', 'failed'];
+const ICON_CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 
 const DEFAULT_SETTINGS = {
   issuedDefault: new Date().toISOString().slice(0, 10),
@@ -399,7 +507,10 @@ const DEFAULT_SETTINGS = {
   requireApproval: true
 };
 
-const state = { email: '', people: [], jobs: [], station: null, settings: { ...DEFAULT_SETTINGS }, selectedId: null, editingId: null, checked: new Set(), started: false };
+const state = {
+  email: '', people: [], jobs: [], station: null, settings: { ...DEFAULT_SETTINGS },
+  checked: new Set(), selecting: false, openId: null, editingId: null, started: false, view: 'people'
+};
 let sb = null;
 let photoTargetId = null;
 
@@ -410,6 +521,7 @@ const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
 const slug = s => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'en', { sensitivity: 'base' });
 const nowISO = () => new Date().toISOString();
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
 /* ---------- Small UI helpers ---------- */
 let toastTimer = null;
@@ -421,7 +533,7 @@ function ask(message, okLabel = 'Delete', danger = true) {
   return new Promise(resolve => {
     const dlg = $('#askDlg');
     $('#askMsg').textContent = message; $('#askOk').textContent = okLabel;
-    $('#askOk').className = danger ? 'danger-solid' : 'primary';
+    $('#askOk').className = 'btn ' + (danger ? 'danger-solid' : 'primary');
     const done = v => { dlg.close(); $('#askOk').onclick = $('#askCancel').onclick = null; resolve(v); };
     $('#askOk').onclick = () => done(true);
     $('#askCancel').onclick = () => done(false);
@@ -431,6 +543,10 @@ function ask(message, okLabel = 'Delete', danger = true) {
 }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 function errMsg(e) { return (e && (e.message || e.error_description || e.error)) || String(e); }
+// Close a dialog when tapping the dark area around it
+document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
+  if (e.target === d && d.id !== 'cropDlg' && d.id !== 'askDlg') d.close();
+}));
 
 /* ---------- Images ---------- */
 const readAsDataURL = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
@@ -444,7 +560,6 @@ async function safeImg(src) { if (!src) return null; try { return await getImg(s
 const canvasBlob = (c, type, q) => new Promise(res => c.toBlob(res, type, q));
 async function dataURLToBlob(u) { return (await fetch(u)).blob(); }
 
-// Private files are downloaded with the signed-in session and shown through local object URLs
 const fileUrlCache = new Map();
 function fileUrl(path) {
   if (!path) return Promise.resolve(null);
@@ -457,7 +572,6 @@ function fileUrl(path) {
   return fileUrlCache.get(path);
 }
 async function fileImg(path) { return safeImg(await fileUrl(path)); }
-
 async function uploadFile(folder, blob, ext, type) {
   const path = `${folder}/${uuid()}.${ext}`;
   const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: type, upsert: false });
@@ -468,7 +582,6 @@ async function removeFile(path) {
   if (!path || path.startsWith('data:')) return;
   try { await sb.storage.from(BUCKET).remove([path]); } catch (e) { console.warn(e); }
 }
-
 async function processPhoto(file) {
   const img = await loadImg(await readAsDataURL(file));
   const tw = 600, th = Math.round(600 * PHOTO.h / PHOTO.w);
@@ -486,6 +599,14 @@ async function processAsset(file, maxW, type) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return canvasBlob(c, type, 0.92);
 }
+function photoSrc(p) { return localPhotos.has(p.id) ? Promise.resolve(localPhotos.get(p.id)) : fileUrl(p.photo); }
+function hasPhoto(p) { return !!(p.photo || localPhotos.has(p.id)); }
+function photoEl(p, cls = 'thumb') {
+  if (!hasPhoto(p)) { const d = document.createElement('div'); d.className = 'nophoto'; d.innerHTML = ICON_CAMERA; return d; }
+  const img = document.createElement('img'); img.className = cls; img.alt = '';
+  photoSrc(p).then(u => { if (u) img.src = u; });
+  return img;
+}
 
 /* ---------- Face detection (loaded on first use, then kept offline) ---------- */
 const FACE_LIB = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/';
@@ -497,7 +618,6 @@ function loadFaceLib() {
         await new Promise((res, rej) => { const s = document.createElement('script'); s.src = FACE_LIB + 'dist/face-api.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
       }
       const tf = window.faceapi.tf;
-      // Use the phone's graphics chip, or plain JavaScript if that is not available
       try { await tf.setBackend('webgl'); } catch { await tf.setBackend('cpu'); }
       await tf.ready();
       await window.faceapi.nets.tinyFaceDetector.loadFromUri(FACE_LIB + 'model/');
@@ -560,7 +680,6 @@ function cropPhoto(file) {
       if (!face) { status.textContent = 'No face found. Position the photo by hand.'; return; }
       status.textContent = '';
       if (touched) return;
-      // Face fills about a third of the photo height, a little above the middle, clear of the banner
       scale = Math.min(base * 4, Math.max(base, 0.30 * CROP_H / face.h));
       z = scale / base; zoomEl.value = z;
       ox = CROP_W / 2 - (face.x + face.w / 2) * scale;
@@ -603,7 +722,7 @@ function cropPhoto(file) {
 
 /* ---------- Saving on the phone when there is no signal ---------- */
 const QUEUED_MSG = 'No signal. Saved on this phone and will upload automatically.';
-const localPhotos = new Map();   // person id -> photo waiting to upload (object URL)
+const localPhotos = new Map();
 const Outbox = {
   db: null,
   async open() {
@@ -618,8 +737,8 @@ const Outbox = {
   async tx(mode, fn) {
     const db = await this.open();
     return new Promise((res, rej) => {
-      const t = db.transaction('items', mode); const store = t.objectStore('items');
-      let out; const r = fn(store); if (r) r.onsuccess = () => { out = r.result; };
+      const t = db.transaction('items', mode); const st = t.objectStore('items');
+      let out; const r = fn(st); if (r) r.onsuccess = () => { out = r.result; };
       t.oncomplete = () => res(out); t.onerror = () => rej(t.error);
     });
   },
@@ -628,26 +747,13 @@ const Outbox = {
   put(item) { return this.tx('readwrite', s => s.put(item)); },
   del(key) { return this.tx('readwrite', s => s.delete(key)); }
 };
-function isNetworkError(err) {
-  return !navigator.onLine || /fetch|network|load failed|timed? ?out|offline|connection/i.test(errMsg(err));
-}
-function setLocalPhoto(id, blob) {
-  if (localPhotos.has(id)) URL.revokeObjectURL(localPhotos.get(id));
-  localPhotos.set(id, URL.createObjectURL(blob));
-}
-function clearLocalPhoto(id) {
-  if (localPhotos.has(id)) { URL.revokeObjectURL(localPhotos.get(id)); localPhotos.delete(id); }
-}
+function isNetworkError(err) { return !navigator.onLine || /fetch|network|load failed|timed? ?out|offline|connection/i.test(errMsg(err)); }
+function setLocalPhoto(id, blob) { if (localPhotos.has(id)) URL.revokeObjectURL(localPhotos.get(id)); localPhotos.set(id, URL.createObjectURL(blob)); }
+function clearLocalPhoto(id) { if (localPhotos.has(id)) { URL.revokeObjectURL(localPhotos.get(id)); localPhotos.delete(id); } }
 async function queuePerson(p, photoBlob, oldPhoto) {
   const prev = await Outbox.get(p.id).catch(() => null);
   const person = { id: p.id, name: p.name, dob: p.dob || '', dan: p.dan || '', issued: p.issued || '', photo: p.photo || null };
-  const item = {
-    key: p.id, person,
-    photoBlob: photoBlob || (prev && prev.photoBlob) || null,
-    oldPhoto: (prev && prev.oldPhoto) || oldPhoto || null,
-    queuedAt: nowISO()
-  };
-  if (item.photoBlob && prev && prev.person && prev.person.photo && !photoBlob) person.photo = prev.person.photo;
+  const item = { key: p.id, person, photoBlob: photoBlob || (prev && prev.photoBlob) || null, oldPhoto: (prev && prev.oldPhoto) || oldPhoto || null, queuedAt: nowISO() };
   await Outbox.put(item);
   if (item.photoBlob) setLocalPhoto(p.id, item.photoBlob);
   upsertLocal({ ...person, _pending: true });
@@ -657,17 +763,15 @@ function upsertLocal(p) {
   const i = state.people.findIndex(x => x.id === p.id);
   if (i >= 0) state.people[i] = { ...state.people[i], ...p }; else state.people.push(p);
   state.people.sort(byName);
-  renderList(); renderPreview();
+  refreshPeopleViews();
 }
-// Saves now when there is signal, otherwise keeps it on the phone and uploads later
 async function savePerson(p, photoBlob) {
   const existing = state.people.find(x => x.id === p.id);
   const oldPhoto = photoBlob && existing ? existing.photo : null;
   const waiting = await Outbox.get(p.id).catch(() => null);
   if (waiting || !navigator.onLine) { await queuePerson(p, photoBlob, oldPhoto); flushOutbox(); return 'queued'; }
   try {
-    const row = { ...p };
-    delete row._pending;
+    const row = { ...p }; delete row._pending;
     if (photoBlob) row.photo = await uploadFile('photos', photoBlob, 'jpg', 'image/jpeg');
     await putPerson(row);
     if (oldPhoto) await removeFile(oldPhoto);
@@ -696,13 +800,12 @@ async function flushOutbox() {
   flushing = true;
   let done = 0;
   try {
-    const items = await Outbox.all();
-    for (const it of items) {
+    for (const it of await Outbox.all()) {
       try {
         if (it.photoBlob) {
           it.person.photo = await uploadFile('photos', it.photoBlob, 'jpg', 'image/jpeg');
           it.photoBlob = null;
-          await Outbox.put(it);              // remember the upload so it is never repeated
+          await Outbox.put(it);
         }
         const { error } = await sb.from('people').upsert(toRow(it.person));
         if (error) throw error;
@@ -711,9 +814,7 @@ async function flushOutbox() {
         clearLocalPhoto(it.key);
         done++;
       } catch (err) {
-        if (isNetworkError(err)) break;     // still no signal; try again later
-        console.warn('Upload failed', err);
-        toast(`Could not upload ${it.person.name}: ${errMsg(err)}`, 7000);
+        if (!isNetworkError(err)) toast(`Could not upload ${it.person.name}: ${errMsg(err)}`, 7000);
         break;
       }
     }
@@ -726,8 +827,8 @@ async function renderOutboxPill(known) {
   let n = known;
   if (n === undefined) { try { n = (await Outbox.all()).length; } catch { n = 0; } }
   const pill = $('#outboxPill');
-  if (!navigator.onLine) { pill.hidden = false; pill.textContent = n ? `Offline: ${n} saved on this phone` : 'Offline'; }
-  else if (n) { pill.hidden = false; pill.textContent = `Uploading ${n}...`; }
+  if (!navigator.onLine) { pill.hidden = false; $('#outboxText').textContent = n ? `Offline, ${n} saved` : 'Offline'; }
+  else if (n) { pill.hidden = false; $('#outboxText').textContent = `Uploading ${n}`; }
   else pill.hidden = true;
 }
 
@@ -749,28 +850,22 @@ function fmtWhen(iso) {
   return d.toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-/* ---------- Data: people, settings, jobs, station ---------- */
+/* ---------- Data ---------- */
 const toRow = p => ({ id: p.id, name: p.name, dob: p.dob || null, dan: p.dan || null, issued: p.issued || null, photo_path: p.photo || null, updated_at: nowISO() });
 const fromRow = r => ({ id: r.id, name: r.name || '', dob: r.dob || '', dan: r.dan || '', issued: r.issued || '', photo: r.photo_path || null });
 
 async function loadPeople() {
   let data = null, error = null;
   try { ({ data, error } = await sb.from('people').select('*').order('name').range(0, 4999)); } catch (e) { error = e; }
-  if (error) {
-    if (!isNetworkError(error)) toast('Could not load people: ' + errMsg(error), 6000);
-  } else {
-    state.people = data.map(fromRow);
-  }
+  if (error) { if (!isNetworkError(error)) toast('Could not load people: ' + errMsg(error), 6000); }
+  else state.people = data.map(fromRow);
   await applyOutbox();
-  renderList(); renderPreview();
+  refreshPeopleViews();
 }
 async function putPerson(p) {
   const { error } = await sb.from('people').upsert(toRow(p));
   if (error) throw error;
-  const i = state.people.findIndex(x => x.id === p.id);
-  if (i >= 0) state.people[i] = { ...p }; else state.people.push({ ...p });
-  state.people.sort(byName);
-  renderList(); renderPreview();
+  upsertLocal({ ...p, _pending: false });
 }
 async function removePerson(p) {
   await Outbox.del(p.id).catch(() => {}); clearLocalPhoto(p.id); renderOutboxPill();
@@ -778,11 +873,9 @@ async function removePerson(p) {
   if (error) throw error;
   state.people = state.people.filter(x => x.id !== p.id);
   state.checked.delete(p.id);
-  if (state.selectedId === p.id) state.selectedId = null;
   await removeFile(p.photo);
-  renderList(); renderPreview();
+  refreshPeopleViews();
 }
-
 function fromSettings(r) {
   r = r || {};
   return {
@@ -796,7 +889,7 @@ function fromSettings(r) {
 }
 async function loadSettings() {
   const { data, error } = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
-  if (error) return toast('Could not load settings: ' + errMsg(error), 6000);
+  if (error) { if (!isNetworkError(error)) toast('Could not load settings: ' + errMsg(error), 6000); return; }
   state.settings = fromSettings(data);
   renderSettings(); renderPreview();
 }
@@ -811,12 +904,8 @@ async function saveSettingsNow() {
   });
   if (error) toast('Settings could not be saved: ' + errMsg(error), 6000);
 }
-
 async function loadJobs() {
-  // Only jobs still waiting to print (failed ones stay so they can be retried)
-  const { data, error } = await sb.from('print_jobs').select('*')
-    .in('status', ['pending', 'approved', 'printing', 'failed'])
-    .order('created_at', { ascending: true }).limit(50);
+  const { data, error } = await sb.from('print_jobs').select('*').in('status', WAITING).order('created_at', { ascending: true }).limit(50);
   if (error) return;
   state.jobs = data || []; renderJobs();
 }
@@ -828,86 +917,61 @@ async function loadStation() {
 /* ---------- Card drawing ---------- */
 let fontsReady = null;
 function ensureFonts() {
-  if (!fontsReady) {
-    fontsReady = Promise.all([
-      document.fonts.load(`700 50px ${NAME_FONT}`),
-      document.fonts.load(`400 37px ${FONT}`),
-      document.fonts.load(`700 37px ${FONT}`)
-    ]).catch(() => {});
-  }
+  if (!fontsReady) fontsReady = Promise.all([
+    document.fonts.load(`700 50px ${NAME_FONT}`), document.fonts.load(`400 37px ${FONT}`), document.fonts.load(`700 37px ${FONT}`)
+  ]).catch(() => {});
   return fontsReady;
 }
 function fitText(ctx, text, x, y, maxW, font, weight, size, align) {
   let s = size;
   do { ctx.font = `${weight} ${s}px ${font}`; if (ctx.measureText(text).width <= maxW) break; s -= 1; } while (s > 14);
-  ctx.textAlign = align || 'left';
-  ctx.fillText(text, x, y);
-  ctx.textAlign = 'left';
+  ctx.textAlign = align || 'left'; ctx.fillText(text, x, y); ctx.textAlign = 'left';
 }
-
 async function drawFront(ctx) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, CARD_W, CARD_H);
   const img = (await fileImg(state.settings.front)) || (await safeImg(ASSET_FRONT));
   if (img) ctx.drawImage(img, 0, 0, CARD_W, CARD_H);
 }
-
 async function drawBack(ctx, p) {
   await ensureFonts();
-  const S = state.settings;
-  const body = 9 * K;
-  const textMax = 150 * K - 17;
+  const S = state.settings, body = 9 * K, textMax = 150 * K - 17;
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, CARD_W, CARD_H);
   ctx.textBaseline = 'alphabetic';
-
   const photo = localPhotos.has(p.id) ? await safeImg(localPhotos.get(p.id)) : await fileImg(p.photo);
-  if (photo) {
-    ctx.drawImage(photo, PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
-  } else {
+  if (photo) ctx.drawImage(photo, PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
+  else {
     ctx.fillStyle = '#eceef1'; ctx.fillRect(PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
     ctx.fillStyle = '#9aa1ab'; ctx.font = `400 28px ${FONT}`;
     ctx.textAlign = 'center'; ctx.fillText('No photo', PHOTO.x + PHOTO.w / 2, PHOTO.y + PHOTO.h / 2 + 40); ctx.textAlign = 'left';
   }
-
   const banner = await safeImg(ASSET_BANNER);
   if (banner) ctx.drawImage(banner, 152.6 * K, 4.3 * K, 89.1 * K, 35.3 * K);
   ctx.fillStyle = '#ffffff';
   fitText(ctx, p.dan || '', 199.6 * K, 24.1 * K, 70 * K, FONT, '700', body, 'center');
-
   ctx.fillStyle = '#000000';
   fitText(ctx, p.name || '', 5.9 * K, 20.2 * K, textMax, NAME_FONT, '700', 12 * K);
-
   ctx.font = `700 ${body}px ${FONT}`; ctx.fillText('DOB: ', 5.8 * K, 34.9 * K);
   ctx.font = `400 ${body}px ${FONT}`; ctx.fillText(fmtShort(p.dob), 31.2 * K, 34.9 * K);
-
   (S.certText || '').split('\n').slice(0, 4).forEach((line, i) => {
     fitText(ctx, line.replace(/\{dan\}/gi, p.dan || ''), 4 * K, (48.5 + i * 10.3) * K, textMax, FONT, '400', body);
   });
-
   ctx.font = `700 ${body}px ${FONT}`; ctx.fillText('ISSUED:', 5.9 * K, 96.4 * K);
   ctx.font = `400 ${body}px ${FONT}`; ctx.fillText(' ' + fmtLong(p.issued || S.issuedDefault), 42.4 * K, 96.4 * K);
-
   const sig = await fileImg(S.signature);
   if (sig) ctx.drawImage(sig, 9.4 * K, 99.6 * K, 56.8 * K, 18 * K);
-
-  (S.signText || '').split('\n').slice(0, 3).forEach((line, i) => {
-    fitText(ctx, line, 4 * K, (125.0 + i * 10.3) * K, textMax, FONT, '400', body);
-  });
+  (S.signText || '').split('\n').slice(0, 3).forEach((line, i) => fitText(ctx, line, 4 * K, (125.0 + i * 10.3) * K, textMax, FONT, '400', body));
 }
-
-const SAMPLE = { name: 'Sample Name', dob: '2011-01-01', dan: '1st Dan', issued: '', photo: null };
-let previewSeq = 0;
-async function renderPreview() {
-  const seq = ++previewSeq;
-  const p = state.people.find(x => x.id === state.selectedId) || state.people[0] || SAMPLE;
-  $('#previewName').textContent = p === SAMPLE ? 'Example card' : p.name;
-  $('#sigMissing').hidden = !!state.settings.signature;
+async function drawInto(canvas, p, side) {
   const off = document.createElement('canvas'); off.width = CARD_W; off.height = CARD_H;
-  await drawBack(off.getContext('2d'), p);
-  if (seq !== previewSeq) return;
-  $('#previewBack').getContext('2d').drawImage(off, 0, 0);
-  await drawFront($('#previewFront').getContext('2d'));
+  if (side === 'front') await drawFront(off.getContext('2d')); else await drawBack(off.getContext('2d'), p);
+  canvas.getContext('2d').drawImage(off, 0, 0);
 }
-
+const SAMPLE = { id: 'sample', name: 'Sample Name', dob: '2011-01-01', dan: '1st Dan', issued: '', photo: null };
+function renderPreview() {
+  $('#sigMissing').hidden = !!state.settings.signature;
+  if (state.view === 'more') drawInto($('#settingsPreview'), state.people.find(hasPhoto) || state.people[0] || SAMPLE, 'back');
+  if ($('#personDlg').open) renderPersonCard();
+}
 async function thumbBlob(src) {
   const c = document.createElement('canvas'); c.width = 640; c.height = Math.round(640 * CARD_H / CARD_W);
   c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
@@ -921,11 +985,7 @@ async function buildPdf(list, both, onBack) {
   const c = document.createElement('canvas'); c.width = CARD_W; c.height = CARD_H;
   const ctx = c.getContext('2d');
   let first = true;
-  const addSide = () => {
-    if (!first) doc.addPage([85.6, 54], 'landscape');
-    first = false;
-    doc.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 85.6, 54);
-  };
+  const addSide = () => { if (!first) doc.addPage([85.6, 54], 'landscape'); first = false; doc.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 85.6, 54); };
   for (let i = 0; i < list.length; i++) {
     if (both) { await drawFront(ctx); addSide(); }
     await drawBack(ctx, list[i]); addSide();
@@ -934,128 +994,215 @@ async function buildPdf(list, both, onBack) {
   return doc.output('blob');
 }
 
+/* ---------- Tabs ---------- */
+function showTab(view) {
+  state.view = view; store.set('amaTab', view);
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.view === view)));
+  ['people', 'queue', 'add', 'more'].forEach(v => { $('#view-' + v).hidden = v !== view; });
+  if (view !== 'people' && state.selecting) setSelecting(false);
+  if (view === 'more') renderPreview();
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.view)));
+$('#stationPill').onclick = () => showTab('queue');
+$('#emptyAddBtn').onclick = () => showTab('add');
+
 /* ---------- People list ---------- */
 function visiblePeople() {
   const q = $('#search').value.toLowerCase().trim();
-  const dan = $('#danFilter').value;
-  const photo = $('#photoFilter').value;
-  const hasPhoto = p => !!(p.photo || localPhotos.has(p.id));
+  const dan = $('#danFilter').value, photo = $('#photoFilter').value;
   return state.people.filter(p => (!q || String(p.name).toLowerCase().includes(q))
     && (!dan || (p.dan || '') === dan)
     && (!photo || (photo === 'has' ? hasPhoto(p) : !hasPhoto(p))));
 }
-function renderDanFilter() {
-  const sel = $('#danFilter'); const current = sel.value;
+function renderFilters() {
+  const sel = $('#danFilter'), cur = sel.value;
   const extras = [...new Set(state.people.map(p => p.dan || '').filter(d => d && !DAN_LEVELS.includes(d)))].sort();
   const counts = {}; state.people.forEach(p => { counts[p.dan || ''] = (counts[p.dan || ''] || 0) + 1; });
-  const opts = [['', `All dans (${state.people.length})`], ...[...DAN_LEVELS, ...extras].map(d => [d, `${d} (${counts[d] || 0})`])];
+  const opts = [['', 'All dans'], ...[...DAN_LEVELS, ...extras].filter(d => counts[d]).map(d => [d, `${d} (${counts[d]})`])];
   sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
-  sel.value = opts.some(([v]) => v === current) ? current : '';
+  sel.value = opts.some(([v]) => v === cur) ? cur : '';
   const pf = $('#photoFilter'), pv = pf.value;
-  const withPhoto = state.people.filter(p => p.photo || localPhotos.has(p.id)).length;
+  const withPhoto = state.people.filter(hasPhoto).length;
   pf.innerHTML = `<option value="">Any photo</option><option value="none">No photo (${state.people.length - withPhoto})</option><option value="has">Has photo (${withPhoto})</option>`;
   pf.value = pv;
 }
 function renderList() {
-  renderDanFilter();
+  renderFilters();
   const list = visiblePeople();
-  const tb = $('#rows'); tb.innerHTML = '';
+  const ul = $('#people'); ul.innerHTML = '';
+  ul.classList.toggle('selecting', state.selecting);
   for (const p of list) {
-    const tr = document.createElement('tr');
-    if (p.id === state.selectedId) tr.className = 'active';
-    tr.innerHTML = `
-      <td><input type="checkbox" class="sel" aria-label="Select ${esc(p.name)}" ${state.checked.has(p.id) ? 'checked' : ''}></td>
-      <td>${(p.photo || localPhotos.has(p.id)) ? '<img class="thumb" alt="">' : '<div class="nophoto">No photo</div>'}</td>
-      <td><strong>${esc(p.name)}</strong>${p._pending ? '<span class="pending">Not uploaded yet</span>' : ''}</td>
-      <td class="num">${esc(fmtShort(p.dob))}</td>
-      <td>${p.dan ? `<span class="dan">${esc(p.dan)}</span>` : ''}</td>
-      <td><div class="actions">
-        <button class="small primary" data-a="print">Print</button>
-        <button class="small" data-a="photo">${(p.photo || localPhotos.has(p.id)) ? 'Change photo' : 'Add photo'}</button>
-        <button class="small" data-a="edit">Edit</button>
-        <button class="small danger full-only" data-a="del">Delete</button>
-      </div></td>`;
-    if (localPhotos.has(p.id)) tr.querySelector('img.thumb').src = localPhotos.get(p.id);
-    else if (p.photo) { const img = tr.querySelector('img.thumb'); fileUrl(p.photo).then(u => { if (u) img.src = u; }); }
-    tr.addEventListener('click', async e => {
-      const a = e.target.dataset.a;
-      if (e.target.classList.contains('sel')) { e.target.checked ? state.checked.add(p.id) : state.checked.delete(p.id); updateCount(); return; }
-      if (a === 'print') { sendToPrinter([p]); return; }
-      if (a === 'photo') { photoTargetId = p.id; $('#hiddenPhoto').value = ''; $('#hiddenPhoto').click(); }
-      else if (a === 'edit') startEdit(p);
-      else if (a === 'del') {
-        if (await ask(`Delete ${p.name}? Their photo is deleted too.`)) {
-          try { await removePerson(p); toast(`Deleted ${p.name}`); } catch (err) { toast('Could not delete: ' + errMsg(err), 6000); }
-        }
-        return;
-      }
-      state.selectedId = p.id; renderList(); renderPreview();
-    });
-    tb.appendChild(tr);
+    const li = document.createElement('li');
+    li.className = 'person' + (state.checked.has(p.id) ? ' checked' : '');
+    const pick = document.createElement('input'); pick.type = 'checkbox'; pick.className = 'pick'; pick.checked = state.checked.has(p.id);
+    pick.setAttribute('aria-label', 'Select ' + p.name); pick.tabIndex = -1;
+    const who = document.createElement('div'); who.className = 'who';
+    const bits = [];
+    if (p.dob) bits.push(`<span>${esc(fmtShort(p.dob))}</span>`);
+    if (!hasPhoto(p)) bits.push('<span class="tag muted">No photo</span>');
+    if (p._pending) bits.push('<span class="tag warn">Not uploaded</span>');
+    who.innerHTML = `<strong>${esc(p.name)}</strong><span class="meta">${bits.join('')}</span>`;
+    const dan = document.createElement('span');
+    if (p.dan) { dan.className = 'chip'; dan.textContent = p.dan; }
+    li.append(pick, photoEl(p), who, dan);
+    li.tabIndex = 0;
+    const act = () => {
+      if (state.selecting) { toggleChecked(p.id); return; }
+      openPerson(p.id);
+    };
+    li.addEventListener('click', act);
+    li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+    ul.appendChild(li);
   }
-  $('#emptyMsg').hidden = state.people.length > 0;
-  updateCount();
+  const empty = state.people.length === 0;
+  $('#emptyMsg').hidden = list.length > 0;
+  $('#emptyText').textContent = empty ? 'No one here yet.' : 'No one matches.';
+  $('#emptyAddBtn').hidden = !empty;
+  ul.hidden = list.length === 0;
+  const noPhoto = state.people.filter(p => !hasPhoto(p)).length;
+  $('#countLabel').textContent = state.people.length ? `${state.people.length} people${noPhoto ? `, ${noPhoto} need a photo` : ''}` : '';
+  renderSelBar();
 }
-function updateCount() {
-  const ids = new Set(state.people.map(p => p.id));
-  for (const id of [...state.checked]) if (!ids.has(id)) state.checked.delete(id);
-  const noPhoto = state.people.filter(p => !p.photo).length;
-  $('#countLabel').textContent = state.people.length
-    ? `${state.people.length} people, ${state.checked.size} selected${noPhoto ? `, ${noPhoto} without photo` : ''}` : '';
-  const n = state.checked.size;
-  $('#selBar').hidden = n === 0;
-  $('#selBarCount').textContent = `${n} selected`;
-  document.body.classList.toggle('has-sel-bar', n > 0);
-}
+function refreshPeopleViews() { renderList(); renderPreview(); }
 
-/* ---------- Printing ---------- */
-const STATUS = {
-  pending:   ['Waiting for approval', 'warn'],
-  approved:  ['Approved, waiting for printer', 'info'],
-  printing:  ['Printing', 'info'],
-  printed:   ['Printed', 'ok'],
-  failed:    ['Failed', 'bad'],
-  cancelled: ['Cancelled', '']
-};
-function stationOnline() {
-  const s = state.station;
-  return !!(s && s.last_seen && Date.now() - new Date(s.last_seen) < STATION_ONLINE_MS);
+/* ---------- Select mode ---------- */
+function setSelecting(on) {
+  state.selecting = on;
+  if (!on) state.checked.clear();
+  document.body.classList.toggle('selecting', on);
+  $('#selectBtn').textContent = on ? 'Cancel' : 'Select';
+  renderList();
 }
+function toggleChecked(id) { state.checked.has(id) ? state.checked.delete(id) : state.checked.add(id); renderList(); }
+function renderSelBar() {
+  $('#selBar').hidden = !state.selecting;
+  const n = state.checked.size;
+  $('#selCount').textContent = `${n} selected`;
+  ['#selPrintBtn', '#selPdfBtn', '#selDeleteBtn'].forEach(s => { $(s).disabled = n === 0; });
+}
+const selectedPeople = () => state.people.filter(p => state.checked.has(p.id));
+$('#selectBtn').onclick = () => setSelecting(!state.selecting);
+$('#selDoneBtn').onclick = () => setSelecting(false);
+$('#selAllBtn').onclick = () => { visiblePeople().forEach(p => state.checked.add(p.id)); renderList(); };
+$('#selPrintBtn').onclick = async () => { if (await sendToPrinter(selectedPeople())) setSelecting(false); };
+$('#selPdfBtn').onclick = () => downloadPdf(selectedPeople());
+$('#selDeleteBtn').onclick = async () => {
+  const list = selectedPeople(); if (!list.length) return;
+  if (!await ask(`Delete ${list.length} ${list.length === 1 ? 'person' : 'people'} and their photos? This cannot be undone.`)) return;
+  for (const p of list) { try { await removePerson(p); } catch (err) { return toast('Some people could not be deleted: ' + errMsg(err), 6000); } }
+  toast(`Deleted ${list.length}.`); setSelecting(false);
+};
+$('#search').addEventListener('input', renderList);
+$('#danFilter').addEventListener('change', renderList);
+$('#photoFilter').addEventListener('change', renderList);
+
+/* ---------- Person sheet ---------- */
+let sheetSide = 'back';
+function currentPerson() { return state.people.find(x => x.id === state.openId); }
+function openPerson(id) {
+  state.openId = id; sheetSide = 'back';
+  renderPersonSheet();
+  $('#personDlg').showModal();
+}
+function renderPersonSheet() {
+  const p = currentPerson(); if (!p) { $('#personDlg').close(); return; }
+  const box = $('#pPhoto'); box.innerHTML = ''; box.appendChild(photoEl(p));
+  $('#pName').textContent = p.name;
+  $('#pDan').innerHTML = (p.dan ? `<span class="chip">${esc(p.dan)}</span> ` : '') + (p._pending ? '<span class="tag warn">Not uploaded yet</span>' : '');
+  $('#pDob').textContent = fmtShort(p.dob) || 'Not entered';
+  $('#pIssued').textContent = fmtLong(p.issued || state.settings.issuedDefault) + (p.issued ? '' : ' (default)');
+  $('#pPhotoBtn').textContent = hasPhoto(p) ? 'Change photo' : 'Add photo';
+  renderPersonCard();
+}
+function renderPersonCard() {
+  const p = currentPerson(); if (!p) return;
+  $('#pSideBack').setAttribute('aria-pressed', String(sheetSide === 'back'));
+  $('#pSideFront').setAttribute('aria-pressed', String(sheetSide === 'front'));
+  drawInto($('#pCard'), p, sheetSide);
+}
+$('#pSideBack').onclick = () => { sheetSide = 'back'; renderPersonCard(); };
+$('#pSideFront').onclick = () => { sheetSide = 'front'; renderPersonCard(); };
+$('#pClose').onclick = () => $('#personDlg').close();
+$('#pPrint').onclick = async () => { const p = currentPerson(); if (p && await sendToPrinter([p])) $('#personDlg').close(); };
+$('#pPdf').onclick = () => { const p = currentPerson(); if (p) downloadPdf([p]); };
+$('#pPhotoBtn').onclick = () => { photoTargetId = state.openId; $('#hiddenPhoto').value = ''; $('#hiddenPhoto').click(); };
+$('#pDelete').onclick = async () => {
+  const p = currentPerson(); if (!p) return;
+  if (!await ask(`Delete ${p.name}? Their photo is deleted too.`)) return;
+  try { await removePerson(p); $('#personDlg').close(); toast(`Deleted ${p.name}`); }
+  catch (err) { toast('Could not delete: ' + errMsg(err), 6000); }
+};
+
+/* ---------- Edit details ---------- */
+function fillDanSelect(sel, value) {
+  sel.innerHTML = '<option value="">Choose dan</option>' + DAN_LEVELS.map(d => `<option>${d}</option>`).join('');
+  if (value && !DAN_LEVELS.includes(value)) sel.insertAdjacentHTML('beforeend', `<option>${esc(value)}</option>`);
+  sel.value = value || '';
+}
+$('#pEdit').onclick = () => {
+  const p = currentPerson(); if (!p) return;
+  state.editingId = p.id;
+  $('#eName').value = p.name; $('#eDob').value = p.dob || ''; $('#eIssued').value = p.issued || '';
+  fillDanSelect($('#eDan'), p.dan);
+  $('#editDlg').showModal();
+};
+$('#eCancel').onclick = () => $('#editDlg').close();
+$('#editForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p = state.people.find(x => x.id === state.editingId); if (!p) return;
+  const next = { ...p, name: $('#eName').value.trim(), dan: $('#eDan').value, dob: $('#eDob').value, issued: $('#eIssued').value };
+  if (!next.name || !next.dan) return;
+  $('#eSave').disabled = true;
+  try {
+    const r = await savePerson(next, null);
+    $('#editDlg').close(); renderPersonSheet();
+    toast(r === 'queued' ? QUEUED_MSG : `Saved ${next.name}`, r === 'queued' ? 6000 : 3500);
+  } catch (err) { toast('Could not save: ' + errMsg(err), 6000); }
+  finally { $('#eSave').disabled = false; }
+});
+
+/* ---------- Print queue ---------- */
+const STATUS = {
+  pending:  ['Needs approval', 'warn'],
+  approved: ['Waiting for printer', 'info'],
+  printing: ['Printing', 'info'],
+  failed:   ['Failed', 'bad']
+};
+function stationOnline() { const s = state.station; return !!(s && s.last_seen && Date.now() - new Date(s.last_seen) < STATION_ONLINE_MS); }
 function renderStation() {
-  const s = state.station, pill = $('#stationPill');
-  if (stationOnline()) {
-    pill.dataset.kind = 'ok'; pill.textContent = 'Print station online';
-    $('#stationText').textContent = `Printer: ${s.printer_name || 'unknown'}${s.computer ? ' on ' + s.computer : ''}`;
-  } else {
-    pill.dataset.kind = 'bad'; pill.textContent = 'Print station offline';
-    $('#stationText').textContent = s && s.last_seen ? `Laptop last seen ${fmtWhen(s.last_seen)}. Jobs will print when it is back on.` : 'The print station has not connected yet.';
-  }
+  const s = state.station, on = stationOnline(), pill = $('#stationPill');
+  pill.hidden = false; pill.dataset.kind = on ? 'ok' : 'bad';
+  $('#stationShort').textContent = on ? 'Printer ready' : 'Printer offline';
+  $('#stationDot').style.background = on ? 'var(--ok)' : 'var(--danger)';
+  $('#stationTitle').textContent = on ? 'Printer ready' : 'Printer offline';
+  $('#stationText').textContent = on
+    ? `${s.printer_name || 'Card printer'}${s.computer ? ' on ' + s.computer : ''}`
+    : (s && s.last_seen ? `Last seen ${fmtWhen(s.last_seen)}. Jobs will print when it is back on.` : 'The print station is not running. Jobs will print when it starts.');
 }
 function summariseNames(names) {
   names = names || [];
-  if (names.length <= 3) return names.join(', ');
-  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+  return names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
 }
 function renderJobs() {
   const box = $('#jobs'); box.innerHTML = '';
   $('#jobsEmpty').hidden = state.jobs.length > 0;
-  $('#waitCount').hidden = state.jobs.length === 0;
-  $('#waitCount').textContent = state.jobs.length;
+  const needApproval = state.jobs.filter(j => j.status === 'pending').length;
+  const badge = $('#queueBadge'); badge.hidden = state.jobs.length === 0; badge.textContent = state.jobs.length;
+  badge.style.background = needApproval ? 'var(--danger)' : 'var(--info)';
   for (const j of state.jobs) {
     const [label, kind] = STATUS[j.status] || [j.status, ''];
     const div = document.createElement('div'); div.className = 'job';
-    const cards = `${j.card_count} card${j.card_count === 1 ? '' : 's'}, ${j.sides === 'both' ? 'both sides' : 'personal side only'}`;
-    let btns = '';
-    if (j.status === 'pending') btns = '<button class="small primary" data-a="approve">Approve</button><button class="small danger" data-a="cancel">Cancel</button>';
-    else if (j.status === 'approved') btns = '<button class="small danger" data-a="cancel">Cancel</button>';
-    else if (j.status === 'failed') btns = '<button class="small primary" data-a="retry">Try again</button><button class="small danger" data-a="cancel">Remove</button>';
-    btns = '<button class="small" data-a="preview">Preview</button>' + btns;
+    let btns = '<button class="btn" data-a="preview">Preview</button>';
+    if (j.status === 'pending') btns += '<button class="btn danger" data-a="cancel">Cancel</button><button class="btn primary" data-a="approve">Approve</button>';
+    else if (j.status === 'approved') btns += '<button class="btn danger" data-a="cancel">Cancel</button>';
+    else if (j.status === 'failed') btns += '<button class="btn danger" data-a="cancel">Remove</button><button class="btn primary" data-a="retry">Try again</button>';
     div.innerHTML = `
-      <div class="who"><div class="names">${esc(summariseNames(j.people_names))}</div>
-        <div class="meta">${esc(cards)} · sent ${esc(fmtWhen(j.created_at))}${j.created_by_email ? ' by ' + esc(j.created_by_email) : ''}</div></div>
-      <span class="pill" data-kind="${kind}">${esc(label)}</span>
+      <div class="job-top"><div><div class="names">${esc(summariseNames(j.people_names))}</div>
+        <div class="meta">${j.card_count} card${j.card_count === 1 ? '' : 's'}, ${j.sides === 'both' ? 'both sides' : 'personal side'} · ${esc(fmtWhen(j.created_at))}${j.created_by_email ? ' · ' + esc(j.created_by_email) : ''}</div></div>
+        <span class="state" data-kind="${kind}">${esc(label)}</span></div>
       ${j.status === 'failed' && j.error ? `<div class="err">${esc(j.error)}</div>` : ''}
-      ${btns ? `<div class="btns">${btns}</div>` : ''}`;
+      <div class="row">${btns}</div>`;
     div.addEventListener('click', async e => {
       const a = e.target.dataset.a; if (!a) return;
       if (a === 'preview') return openJobPreview(j);
@@ -1063,31 +1210,30 @@ function renderJobs() {
       try {
         if (a === 'approve' || a === 'retry') await updateJob(j, { status: 'approved', approved_at: nowISO(), approved_by_email: state.email, error: null });
         else if (a === 'cancel') await updateJob(j, { status: 'cancelled' });
-        else if (a === 'pdf') {
-          const { data, error } = await sb.storage.from(BUCKET).download(j.pdf_path);
-          if (error) throw error;
-          downloadFile(`ama-print-job-${j.created_at.slice(0, 10)}.pdf`, data);
-        }
       } catch (err) { toast('That did not work: ' + errMsg(err), 6000); e.target.disabled = false; }
     });
     box.appendChild(div);
   }
 }
+async function updateJob(j, patch) {
+  const { error } = await sb.from('print_jobs').update(patch).eq('id', j.id);
+  if (error) throw error;
+  Object.assign(j, patch);
+  state.jobs = state.jobs.filter(x => WAITING.includes(x.status));
+  renderJobs();
+}
 async function openJobPreview(j) {
   const dlg = $('#jobDlg'), body = $('#jobDlgBody'), ap = $('#jobDlgApprove');
-  const names = j.people_names || [];
-  const n = j.card_count || names.length;
+  const names = j.people_names || [], n = j.card_count || names.length;
   $('#jobDlgMeta').textContent = `${n} card${n === 1 ? '' : 's'}, ${j.sides === 'both' ? 'both sides' : 'personal side only'}`;
   ap.hidden = j.status !== 'pending';
   ap.onclick = async () => {
     ap.disabled = true;
-    try {
-      await updateJob(j, { status: 'approved', approved_at: nowISO(), approved_by_email: state.email, error: null });
-      dlg.close(); toast('Approved. It will print shortly.');
-    } catch (err) { toast('Could not approve: ' + errMsg(err), 6000); }
+    try { await updateJob(j, { status: 'approved', approved_at: nowISO(), approved_by_email: state.email, error: null }); dlg.close(); toast('Approved. It will print shortly.'); }
+    catch (err) { toast('Could not approve: ' + errMsg(err), 6000); }
     finally { ap.disabled = false; }
   };
-  $('#jobDlgClose').onclick = () => dlg.close();
+  $('#jobDlgClose').onclick = $('#jobDlgX').onclick = () => dlg.close();
   body.innerHTML = '<p class="hint">Loading the cards...</p>';
   dlg.showModal();
   const items = [];
@@ -1102,29 +1248,20 @@ async function openJobPreview(j) {
     fig.innerHTML = `<img alt="Card for ${esc(label)}" src="${esc(urls[i])}"><figcaption>${esc(label)}</figcaption>`;
     body.appendChild(fig); shown++;
   });
-  if (!shown) body.innerHTML = '<p class="hint">There is no preview for this job, because it was sent before previews were added. Use Download PDF to check it.</p>';
-}
-async function updateJob(j, patch) {
-  const { error } = await sb.from('print_jobs').update(patch).eq('id', j.id);
-  if (error) throw error;
-  Object.assign(j, patch);
-  state.jobs = state.jobs.filter(x => ['pending', 'approved', 'printing', 'failed'].includes(x.status));
-  renderJobs();
+  if (!shown) body.innerHTML = '<p class="hint">There is no preview for this job because it was sent before previews were added.</p>';
 }
 async function sendToPrinter(list) {
-  if (!list.length) return toast('No one is selected.');
-  const missing = list.filter(p => !p.photo).length;
-  if (missing && !await ask(`${missing} card${missing === 1 ? ' has' : 's have'} no photo. Send anyway?`, 'Send', false)) return;
+  if (!list.length) { toast('No one is selected.'); return false; }
+  const missing = list.filter(p => !hasPhoto(p)).length;
+  if (missing && !await ask(`${missing} card${missing === 1 ? ' has' : 's have'} no photo. Print anyway?`, 'Print', false)) return false;
   const both = $('#sides').value === 'both';
   toast('Preparing cards...', 0);
   try {
     const previews = [];
     const blob = await buildPdf(list, both, async c => { previews.push(await thumbBlob(c)); });
-    const id = uuid();
-    const path = `jobs/${id}.pdf`;
+    const id = uuid(), path = `jobs/${id}.pdf`;
     const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
     if (up.error) throw up.error;
-    // Small pictures of each card so the job can be checked on a phone before approving
     const uploads = previews.map((b, i) => [`jobs/${id}/back-${i}.jpg`, b]);
     if (both) {
       const fc = document.createElement('canvas'); fc.width = CARD_W; fc.height = CARD_H;
@@ -1132,47 +1269,24 @@ async function sendToPrinter(list) {
       uploads.push([`jobs/${id}/front.jpg`, await thumbBlob(fc)]);
     }
     for (let i = 0; i < uploads.length; i += 6) {
-      await Promise.all(uploads.slice(i, i + 6).map(([pth, b]) =>
-        sb.storage.from(BUCKET).upload(pth, b, { contentType: 'image/jpeg', upsert: true }).catch(() => null)));
+      await Promise.all(uploads.slice(i, i + 6).map(([pth, b]) => sb.storage.from(BUCKET).upload(pth, b, { contentType: 'image/jpeg', upsert: true }).catch(() => null)));
     }
     const auto = !state.settings.requireApproval;
-    const job = {
+    const { error } = await sb.from('print_jobs').insert({
       id, people_names: list.map(p => p.name), card_count: list.length, sides: both ? 'both' : 'back', pdf_path: path,
       status: auto ? 'approved' : 'pending', approved_at: auto ? nowISO() : null, approved_by_email: auto ? state.email : null
-    };
-    const { error } = await sb.from('print_jobs').insert(job);
+    });
     if (error) throw error;
-    toast(auto ? 'Sent to the printer.' : 'Sent. Approve it under Waiting to print.', 5000);
+    toast(auto ? 'Sent to the printer.' : 'Sent. Approve it in the Print queue.', 5000);
     loadJobs();
-  } catch (err) { toast('Could not send to the printer: ' + errMsg(err), 7000); }
+    return true;
+  } catch (err) {
+    toast(isNetworkError(err) ? 'No signal. Printing needs a connection; try again when you have signal.' : 'Could not send to the printer: ' + errMsg(err), 7000);
+    return false;
+  }
 }
 
-/* ---------- Add / edit ---------- */
-function startEdit(p) {
-  state.editingId = p.id;
-  $('#formTitle').textContent = 'Edit person';
-  $('#submitBtn').textContent = 'Save changes';
-  $('#cancelEdit').hidden = false;
-  $('#fName').value = p.name || ''; $('#fDob').value = p.dob || '';
-  const danSel = $('#fDan');
-  danSel.querySelectorAll('option.custom').forEach(o => o.remove());
-  if (p.dan && ![...danSel.options].some(o => o.value === p.dan)) {
-    const o = document.createElement('option'); o.className = 'custom'; o.value = o.textContent = p.dan; danSel.appendChild(o);
-  }
-  danSel.value = p.dan || ''; $('#fIssued').value = p.issued || ''; $('#fPhoto').value = '';
-  $('#panelAdd').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setTimeout(() => $('#fName').focus({ preventScroll: true }), 300);
-}
-function resetForm() {
-  state.editingId = null;
-  $('#personForm').reset();
-  pendingPhoto = null; $('#fPhotoPreview').hidden = true;
-  document.querySelectorAll('#fDan option.custom').forEach(o => o.remove());
-  $('#formTitle').textContent = 'Add person';
-  $('#submitBtn').textContent = 'Add person';
-  $('#cancelEdit').hidden = true;
-}
-$('#cancelEdit').onclick = resetForm;
+/* ---------- Add ---------- */
 let pendingPhoto = null;
 $('#fPhoto').addEventListener('change', async e => {
   const f = e.target.files[0];
@@ -1187,23 +1301,18 @@ $('#personForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#submitBtn'); btn.disabled = true;
   try {
-    const data = { name: $('#fName').value.trim(), dob: $('#fDob').value, dan: $('#fDan').value, issued: $('#fIssued').value };
-    if (!data.name) return;
-    const existing = state.people.find(p => p.id === state.editingId);
-    const p = existing ? { ...existing, ...data } : { id: uuid(), photo: null, ...data };
-    const result = await savePerson(p, pendingPhoto);
-    if (!existing) state.checked.add(p.id);
-    state.selectedId = p.id;
-    if (result === 'queued') toast(QUEUED_MSG, 6000); else toast(existing ? `Saved ${p.name}` : `Added ${p.name}`);
-    resetForm(); renderList(); renderPreview();
-  } catch (err) {
-    toast('Could not save: ' + errMsg(err), 6000);
-  } finally { btn.disabled = false; }
+    const p = { id: uuid(), photo: null, name: $('#fName').value.trim(), dob: $('#fDob').value, dan: $('#fDan').value, issued: $('#fIssued').value };
+    if (!p.name || !p.dan) return;
+    const r = await savePerson(p, pendingPhoto);
+    toast(r === 'queued' ? QUEUED_MSG : `Added ${p.name}`, r === 'queued' ? 6000 : 3500);
+    $('#personForm').reset(); pendingPhoto = null; $('#fPhotoPreview').hidden = true;
+  } catch (err) { toast('Could not save: ' + errMsg(err), 6000); }
+  finally { btn.disabled = false; }
 });
 
-/* ---------- Quick add: photo first, then name and dan ---------- */
+/* Quick add: photo first, then name and dan */
 let quickBlob = null;
-$('#qDan').innerHTML = $('#fDan').innerHTML;
+fillDanSelect($('#qDan'), '');
 $('#quickAddBtn').onclick = () => { $('#quickCam').value = ''; $('#quickCam').click(); };
 $('#quickCam').addEventListener('change', async e => {
   const f = e.target.files[0]; if (!f) return;
@@ -1222,57 +1331,33 @@ function quickPerson() {
 }
 async function quickSave(p, blob) {
   try {
-    const result = await savePerson(p, blob);
-    state.checked.add(p.id);
-    toast(result === 'queued' ? `${p.name}: ${QUEUED_MSG}` : `Added ${p.name}`, result === 'queued' ? 6000 : 3500);
+    const r = await savePerson(p, blob);
+    toast(r === 'queued' ? `${p.name}: ${QUEUED_MSG}` : `Added ${p.name}`, r === 'queued' ? 6000 : 3500);
   } catch (err) { toast(`Could not save ${p.name}: ${errMsg(err)}`, 7000); }
 }
-$('#qSave').onclick = () => {
-  const p = quickPerson(); if (!p) return;
-  $('#quickDlg').close(); quickSave(p, quickBlob);
-};
+$('#qSave').onclick = () => { const p = quickPerson(); if (!p) return; $('#quickDlg').close(); quickSave(p, quickBlob); };
 $('#qNext').onclick = () => {
   const p = quickPerson(); if (!p) return;
-  $('#quickDlg').close();
-  quickSave(p, quickBlob);
-  $('#quickCam').value = ''; $('#quickCam').click();   // straight back to the camera
+  $('#quickDlg').close(); quickSave(p, quickBlob);
+  $('#quickCam').value = ''; $('#quickCam').click();
 };
 $('#qCancel').onclick = () => $('#quickDlg').close();
 
-/* ---------- Photos ---------- */
-async function setPhoto(p, file, croppedBlob) {
-  const old = p.photo;
-  const path = await uploadFile('photos', croppedBlob || await processPhoto(file), 'jpg', 'image/jpeg');
-  await putPerson({ ...p, photo: path });
-  await removeFile(old);
-}
+/* Change photo for an existing person */
 $('#hiddenPhoto').addEventListener('change', async e => {
   const file = e.target.files[0]; const p = state.people.find(x => x.id === photoTargetId);
   if (!file || !p) return;
   const cropped = await cropPhoto(file);
   if (!cropped) return;
-  toast('Uploading photo...', 0);
+  toast('Saving photo...', 0);
   try {
-    const result = await savePerson({ ...p }, cropped);
-    state.selectedId = p.id; renderPreview();
-    toast(result === 'queued' ? QUEUED_MSG : `Photo saved for ${p.name}`, result === 'queued' ? 6000 : 3500);
-  }
-  catch (err) { toast('The photo could not be uploaded: ' + errMsg(err), 6000); }
-});
-$('#bulkPhotoBtn').onclick = () => { $('#hiddenBulkPhotos').value = ''; $('#hiddenBulkPhotos').click(); };
-$('#hiddenBulkPhotos').addEventListener('change', async e => {
-  const files = [...e.target.files]; let matched = 0; const missed = [];
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    toast(`Matching photos ${i + 1} of ${files.length}...`, 0);
-    const p = state.people.find(x => slug(x.name) === slug(file.name.replace(/\.[^.]+$/, '')));
-    if (!p) { missed.push(file.name); continue; }
-    try { await setPhoto(p, file); matched++; } catch { missed.push(file.name); }
-  }
-  toast(`${matched} photo${matched === 1 ? '' : 's'} matched.` + (missed.length ? ` No match for: ${missed.join(', ')}` : ''), 8000);
+    const r = await savePerson({ ...p }, cropped);
+    if ($('#personDlg').open) renderPersonSheet();
+    toast(r === 'queued' ? QUEUED_MSG : `Photo saved for ${p.name}`, r === 'queued' ? 6000 : 3500);
+  } catch (err) { toast('The photo could not be saved: ' + errMsg(err), 6000); }
 });
 
-/* ---------- CSV import / export ---------- */
+/* ---------- Import and export ---------- */
 function parseCSV(text) {
   const rows = []; let row = [], cur = '', q = false;
   for (let i = 0; i < text.length; i++) {
@@ -1287,8 +1372,7 @@ function parseCSV(text) {
   return rows.filter(r => r.some(c => c.trim()));
 }
 const HEADER_MAP = {
-  name: 'name', fullname: 'name',
-  firstname: 'first', givenname: 'first', lastname: 'last', surname: 'last', familyname: 'last',
+  name: 'name', fullname: 'name', firstname: 'first', givenname: 'first', lastname: 'last', surname: 'last', familyname: 'last',
   dob: 'dob', dateofbirth: 'dob', birthdate: 'dob', birthday: 'dob',
   dan: 'dan', grade: 'dan', rank: 'dan', danrank: 'dan', belt: 'dan',
   issued: 'issued', issue: 'issued', issueddate: 'issued', dateissued: 'issued', issuedate: 'issued'
@@ -1310,7 +1394,6 @@ $('#hiddenCsv').addEventListener('change', async e => {
   toast(`Importing ${add.length}...`, 0);
   const { error } = await sb.from('people').insert(add.map(toRow));
   if (error) return toast('Import failed: ' + errMsg(error), 7000);
-  add.forEach(p => state.checked.add(p.id));
   await loadPeople();
   toast(`Imported ${add.length} ${add.length === 1 ? 'person' : 'people'}.`);
 });
@@ -1320,24 +1403,22 @@ $('#exportListBtn').onclick = () => {
   if (!list.length) return toast('No one to export.');
   const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const rows = [['Name', 'Date of birth', 'Dan', 'Issued', 'Photo']];
-  for (const p of list) rows.push([p.name, fmtShort(p.dob), p.dan || '', fmtShort(p.issued || state.settings.issuedDefault), p.photo ? 'Yes' : 'No']);
+  for (const p of list) rows.push([p.name, fmtShort(p.dob), p.dan || '', fmtShort(p.issued || state.settings.issuedDefault), hasPhoto(p) ? 'Yes' : 'No']);
   const dan = $('#danFilter').value;
   downloadFile(`ama-members${dan ? '-' + slug(dan) : ''}-${nowISO().slice(0, 10)}.csv`, '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n');
 };
-
-/* ---------- Selection, delete, export ---------- */
-$('#search').addEventListener('input', renderList);
-$('#danFilter').addEventListener('change', renderList);
-$('#photoFilter').addEventListener('change', renderList);
-$('#selectAllBtn').onclick = () => { visiblePeople().forEach(p => state.checked.add(p.id)); renderList(); };
-$('#selectNoneBtn').onclick = () => { state.checked.clear(); renderList(); };
-$('#deleteSelBtn').onclick = async () => {
-  const list = state.people.filter(p => state.checked.has(p.id));
-  if (!list.length) return toast('No one is selected.');
-  if (!await ask(`Delete ${list.length} selected ${list.length === 1 ? 'person' : 'people'} and their photos? This cannot be undone.`)) return;
-  for (const p of list) { try { await removePerson(p); } catch (err) { return toast('Some people could not be deleted: ' + errMsg(err), 6000); } }
-  toast(`Deleted ${list.length}.`);
-};
+$('#bulkPhotoBtn').onclick = () => { $('#hiddenBulkPhotos').value = ''; $('#hiddenBulkPhotos').click(); };
+$('#hiddenBulkPhotos').addEventListener('change', async e => {
+  const files = [...e.target.files]; let matched = 0; const missed = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    toast(`Matching photos ${i + 1} of ${files.length}...`, 0);
+    const p = state.people.find(x => slug(x.name) === slug(file.name.replace(/\.[^.]+$/, '')));
+    if (!p) { missed.push(file.name); continue; }
+    try { await savePerson({ ...p }, await processPhoto(file)); matched++; } catch { missed.push(file.name); }
+  }
+  toast(`${matched} photo${matched === 1 ? '' : 's'} matched.` + (missed.length ? ` No match for: ${missed.join(', ')}` : ''), 8000);
+});
 function downloadFile(filename, data) {
   const blob = data instanceof Blob ? data : new Blob([data]);
   const a = document.createElement('a');
@@ -1354,27 +1435,19 @@ async function downloadPdf(list) {
     toast('PDF downloaded.');
   } catch (err) { toast(errMsg(err), 6000); }
 }
-const selectedPeople = () => state.people.filter(p => state.checked.has(p.id));
-const previewPerson = () => state.people.find(x => x.id === state.selectedId) || state.people[0];
-$('#exportSelBtn').onclick = () => downloadPdf(selectedPeople());
-$('#printSelBtn').onclick = () => sendToPrinter(selectedPeople());
-$('#selBarPrint').onclick = () => sendToPrinter(selectedPeople());
-$('#selBarClear').onclick = () => { state.checked.clear(); renderList(); };
-$('#exportOneBtn').onclick = () => { const p = previewPerson(); p ? downloadPdf([p]) : toast('Add a person first.'); };
-$('#printOneBtn').onclick = () => { const p = previewPerson(); p ? sendToPrinter([p]) : toast('Add a person first.'); };
 
 /* ---------- Settings ---------- */
 function renderSettings() {
   const set = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v || ''; };
-  set('#sIssued', state.settings.issuedDefault);
-  set('#sCert', state.settings.certText);
-  set('#sSign', state.settings.signText);
+  set('#sIssued', state.settings.issuedDefault); set('#sCert', state.settings.certText); set('#sSign', state.settings.signText);
   $('#requireApproval').checked = !!state.settings.requireApproval;
 }
 $('#sIssued').addEventListener('input', e => { state.settings.issuedDefault = e.target.value; saveSettingsSoon(); });
 $('#sCert').addEventListener('input', e => { state.settings.certText = e.target.value; saveSettingsSoon(); });
 $('#sSign').addEventListener('input', e => { state.settings.signText = e.target.value; saveSettingsSoon(); });
 $('#requireApproval').addEventListener('change', e => { state.settings.requireApproval = e.target.checked; saveSettingsNow(); });
+$('#sides').value = store.get('amaSides') || 'both';
+$('#sides').addEventListener('change', e => store.set('amaSides', e.target.value));
 $('#resetText').onclick = () => {
   state.settings.certText = DEFAULT_SETTINGS.certText; state.settings.signText = DEFAULT_SETTINGS.signText;
   renderSettings(); renderPreview(); saveSettingsNow();
@@ -1399,8 +1472,7 @@ $('#frontReset').onclick = () => clearSettingImage('front');
 
 /* ---------- Backup / restore ---------- */
 async function pathToDataURL(path) {
-  const u = await fileUrl(path);
-  if (!u) return null;
+  const u = await fileUrl(path); if (!u) return null;
   try { return await readAsDataURL(await (await fetch(u)).blob()); } catch { return null; }
 }
 $('#backupBtn').onclick = async () => {
@@ -1442,18 +1514,9 @@ $('#hiddenRestore').addEventListener('change', async e => {
       try { state.settings[key] = await uploadFile('settings', await dataURLToBlob(s[key]), ext, type); } catch {}
     }
   }
-  await saveSettingsNow(); renderSettings(); renderList(); renderPreview();
+  await saveSettingsNow(); renderSettings(); refreshPeopleViews();
   toast(`Restored ${added} ${added === 1 ? 'person' : 'people'}${skipped ? `, skipped ${skipped}` : ''}.`, 6000);
 });
-
-/* ---------- Simple mode (remembered on each device) ---------- */
-function applySimple(on) {
-  document.body.classList.toggle('simple', on);
-  $('#simpleBtn').textContent = on ? 'Full mode' : 'Simple mode';
-  try { localStorage.setItem('amaSimple', on ? '1' : '0'); } catch { /* not saved on this device */ }
-}
-$('#simpleBtn').onclick = () => applySimple(!document.body.classList.contains('simple'));
-try { applySimple(localStorage.getItem('amaSimple') === '1'); } catch { applySimple(false); }
 
 /* ---------- Sign in and start ---------- */
 $('#loginForm').addEventListener('submit', async e => {
@@ -1469,40 +1532,35 @@ function showView(which) {
   $('#authView').hidden = which !== 'auth';
   $('#configView').hidden = which !== 'config';
   $('#appView').hidden = which !== 'app';
-  $('#headerTools').hidden = which !== 'app';
+  $('#tabbar').hidden = which !== 'app';
 }
-
 async function startApp(session) {
   if (state.started) return;
   state.started = true;
   state.email = session.user.email || '';
-  $('#signOutBtn').title = state.email ? `Signed in as ${state.email}` : '';
+  $('#whoAmI').textContent = state.email;
   showView('app');
-  renderPreview();
+  showTab(['people', 'queue', 'add', 'more'].includes(store.get('amaTab')) ? store.get('amaTab') : 'people');
+  renderList();
   await Promise.all([loadSettings(), loadPeople(), loadJobs(), loadStation()]);
-  const reloadPeople = debounce(loadPeople, 400);
-  const reloadJobs = debounce(loadJobs, 300);
+  const reloadPeople = debounce(loadPeople, 400), reloadJobs = debounce(loadJobs, 300);
   sb.channel('ama-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'people' }, reloadPeople)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => loadSettings())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'print_jobs' }, reloadJobs)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'print_station' }, payload => { if (payload.new) { state.station = payload.new; renderStation(); } })
     .subscribe();
-  // Upload anything saved on this phone while there was no signal
   flushOutbox();
   window.addEventListener('online', () => { renderOutboxPill(); flushOutbox(); });
   window.addEventListener('offline', () => renderOutboxPill());
   setInterval(flushOutbox, 20000);
-  // Fetch the face finder in the background so it also works without signal later
   setTimeout(() => loadFaceLib().catch(() => {}), 4000);
-  // Safety net in case live updates drop (e.g. a phone waking from sleep)
   setInterval(() => { loadStation(); loadJobs(); }, 30000);
+  setInterval(renderStation, 5000);   // flip to offline as soon as check-ins stop
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadPeople(); loadJobs(); loadStation(); } });
 }
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
-}
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 (function boot() {
   const cfg = window.AMA_CONFIG || {};
