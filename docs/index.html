@@ -68,6 +68,18 @@
   input[type=file] { font: inherit; font-size: 13px; color: var(--muted); max-width: 100%; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   input[type=checkbox] { accent-color: var(--accent); }
+  dialog.wide { width: min(560px, calc(100% - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; padding: 16px; }
+  dialog.wide > * + * { margin-top: 12px; }
+  dialog.wide p { margin: 0; }
+  .crop-stage { display: flex; justify-content: center; }
+  #cropCanvas { width: min(300px, 70vw); aspect-ratio: 600 / 806; border-radius: 8px; touch-action: none; cursor: grab; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+  #cropCanvas:active { cursor: grabbing; }
+  #cropZoom { width: 100%; accent-color: var(--accent); }
+  .job-previews { display: flex; flex-direction: column; gap: 14px; }
+  .job-previews figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+  .job-previews img { width: 100%; aspect-ratio: 85.6 / 54; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.12); background: #fff; }
+  .job-previews figcaption { font-size: 13px; color: var(--muted); }
+  #fPhotoPreview { width: 60px; aspect-ratio: 600 / 806; object-fit: cover; border-radius: 6px; box-shadow: 0 0 0 1px var(--line); }
   button { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; white-space: nowrap; }
   button:hover { background: var(--hover); }
   button:disabled { opacity: .5; cursor: default; }
@@ -228,7 +240,7 @@
             <select id="fDan" required><option value="">Choose dan</option><option>1st Dan</option><option>2nd Dan</option><option>3rd Dan</option><option>4th Dan</option><option>5th Dan</option><option>6th Dan</option><option>7th Dan</option><option>8th Dan</option><option>9th Dan</option></select>
           </div>
           <div class="field"><label for="fIssued">Issued date</label><input type="date" id="fIssued"><p class="hint">Leave blank to use the default issued date.</p></div>
-          <div class="field"><label for="fPhoto">Photo</label><input type="file" id="fPhoto" accept="image/*"><p class="hint">Optional. You can add it later.</p></div>
+          <div class="field"><label for="fPhoto">Photo</label><input type="file" id="fPhoto" accept="image/*"><img id="fPhotoPreview" alt="Chosen photo" hidden><p class="hint">Optional. On a phone you can take the photo with the camera.</p></div>
           <div class="row">
             <button type="submit" class="primary" id="submitBtn">Add person</button>
             <button type="button" id="cancelEdit" hidden>Cancel</button>
@@ -326,6 +338,18 @@
   </div>
 </dialog>
 <div class="sel-bar" id="selBar" hidden><span class="count" id="selBarCount"></span><button id="selBarClear">Clear</button><button class="primary" id="selBarPrint">Send to printer</button></div>
+<dialog id="cropDlg" class="wide">
+  <h2>Position the photo</h2>
+  <p class="hint">Drag to move. Pinch, scroll or use the slider to zoom. The banner shows what the dan banner will cover on the card.</p>
+  <div class="crop-stage"><canvas id="cropCanvas"></canvas></div>
+  <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+  <div class="row" style="justify-content:flex-end"><button id="cropCancel">Cancel</button><button class="primary" id="cropOk">Use photo</button></div>
+</dialog>
+<dialog id="jobDlg" class="wide">
+  <div class="panel-head"><h2>Check the cards</h2><span class="count" id="jobDlgMeta"></span></div>
+  <div id="jobDlgBody" class="job-previews"></div>
+  <div class="row" style="justify-content:flex-end"><button id="jobDlgClose">Close</button><button class="primary" id="jobDlgApprove" hidden>Approve and print</button></div>
+</dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
@@ -438,6 +462,73 @@ async function processAsset(file, maxW, type) {
   c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return canvasBlob(c, type, 0.92);
+}
+
+/* ---------- Photo cropper ---------- */
+const CROP_W = 600, CROP_H = Math.round(600 * PHOTO.h / PHOTO.w);
+function cropPhoto(file) {
+  return new Promise(async resolve => {
+    let img;
+    try { img = await loadImg(await readAsDataURL(file)); }
+    catch { toast('That file could not be opened as a photo.'); return resolve(null); }
+    const dlg = $('#cropDlg'), cv = $('#cropCanvas'), ctx = cv.getContext('2d'), zoomEl = $('#cropZoom');
+    cv.width = CROP_W; cv.height = CROP_H;
+    const base = Math.max(CROP_W / img.width, CROP_H / img.height);
+    let z = 1, scale = base;
+    let ox = (CROP_W - img.width * base) / 2, oy = (CROP_H - img.height * base) / 2;
+    const banner = await safeImg(ASSET_BANNER);
+    const clamp = () => {
+      const dw = img.width * scale, dh = img.height * scale;
+      ox = Math.min(0, Math.max(CROP_W - dw, ox)); oy = Math.min(0, Math.max(CROP_H - dh, oy));
+    };
+    const paint = (c, withBanner) => {
+      c.fillStyle = '#fff'; c.fillRect(0, 0, CROP_W, CROP_H);
+      c.drawImage(img, ox, oy, img.width * scale, img.height * scale);
+      if (withBanner && banner) {
+        c.globalAlpha = 0.8;
+        c.drawImage(banner, (152.6 - 157.2) / 82.2 * CROP_W, (4.3 - 22.7) / 110.4 * CROP_H, 89.1 / 82.2 * CROP_W, 35.3 / 110.4 * CROP_H);
+        c.globalAlpha = 1;
+      }
+    };
+    const draw = () => { clamp(); paint(ctx, true); };
+    const setZoom = (nz, cx = CROP_W / 2, cy = CROP_H / 2) => {
+      nz = Math.min(4, Math.max(1, nz));
+      const ix = (cx - ox) / scale, iy = (cy - oy) / scale;
+      z = nz; scale = base * z; ox = cx - ix * scale; oy = cy - iy * scale;
+      zoomEl.value = z; draw();
+    };
+    zoomEl.value = 1;
+    const pts = new Map(); let pinch = null;
+    const toCanvas = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * CROP_W / r.width, (e.clientY - r.top) * CROP_H / r.height]; };
+    cv.onpointerdown = e => {
+      cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, toCanvas(e));
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z }; }
+    };
+    cv.onpointermove = e => {
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId), cur = toCanvas(e); pts.set(e.pointerId, cur);
+      if (pts.size === 2 && pinch) {
+        const [a, b] = [...pts.values()];
+        setZoom(pinch.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      } else if (pts.size === 1) { ox += cur[0] - prev[0]; oy += cur[1] - prev[1]; draw(); }
+    };
+    cv.onpointerup = cv.onpointercancel = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+    cv.onwheel = e => { e.preventDefault(); const [cx, cy] = toCanvas(e); setZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), cx, cy); };
+    zoomEl.oninput = () => setZoom(parseFloat(zoomEl.value));
+    draw();
+    const finish = async ok => {
+      dlg.close();
+      cv.onpointerdown = cv.onpointermove = cv.onpointerup = cv.onpointercancel = cv.onwheel = null;
+      if (!ok) return resolve(null);
+      const out = document.createElement('canvas'); out.width = CROP_W; out.height = CROP_H;
+      paint(out.getContext('2d'), false);
+      resolve(await canvasBlob(out, 'image/jpeg', 0.9));
+    };
+    $('#cropOk').onclick = () => finish(true);
+    $('#cropCancel').onclick = () => finish(false);
+    dlg.oncancel = e => { e.preventDefault(); finish(false); };
+    dlg.showModal();
+  });
 }
 
 /* ---------- Dates ---------- */
@@ -608,7 +699,12 @@ async function renderPreview() {
   await drawFront($('#previewFront').getContext('2d'));
 }
 
-async function buildPdf(list, both) {
+async function thumbBlob(src) {
+  const c = document.createElement('canvas'); c.width = 640; c.height = Math.round(640 * CARD_H / CARD_W);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return canvasBlob(c, 'image/jpeg', 0.82);
+}
+async function buildPdf(list, both, onBack) {
   if (!window.jspdf) throw new Error('The PDF tool did not load. Reload the page and try again.');
   await ensureFonts();
   const { jsPDF } = window.jspdf;
@@ -621,9 +717,10 @@ async function buildPdf(list, both) {
     first = false;
     doc.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 85.6, 54);
   };
-  for (const p of list) {
+  for (let i = 0; i < list.length; i++) {
     if (both) { await drawFront(ctx); addSide(); }
-    await drawBack(ctx, p); addSide();
+    await drawBack(ctx, list[i]); addSide();
+    if (onBack) await onBack(c, i);
   }
   return doc.output('blob');
 }
@@ -733,6 +830,7 @@ function renderJobs() {
     else if (j.status === 'approved') btns = '<button class="small danger" data-a="cancel">Cancel</button>';
     else if (j.status === 'failed') btns = '<button class="small primary" data-a="retry">Try again</button><button class="small" data-a="pdf">Download PDF</button>';
     else if (j.status === 'printed' || j.status === 'cancelled') btns = '<button class="small" data-a="retry">Print again</button><button class="small" data-a="pdf">Download PDF</button>';
+    btns = '<button class="small" data-a="preview">Preview</button>' + btns;
     div.innerHTML = `
       <div class="who"><div class="names">${esc(summariseNames(j.people_names))}</div>
         <div class="meta">${esc(cards)} · sent ${esc(fmtWhen(j.created_at))}${j.created_by_email ? ' by ' + esc(j.created_by_email) : ''}</div></div>
@@ -741,6 +839,7 @@ function renderJobs() {
       ${btns ? `<div class="btns">${btns}</div>` : ''}`;
     div.addEventListener('click', async e => {
       const a = e.target.dataset.a; if (!a) return;
+      if (a === 'preview') return openJobPreview(j);
       e.target.disabled = true;
       try {
         if (a === 'approve' || a === 'retry') await updateJob(j, { status: 'approved', approved_at: nowISO(), approved_by_email: state.email, error: null });
@@ -755,6 +854,37 @@ function renderJobs() {
     box.appendChild(div);
   }
 }
+async function openJobPreview(j) {
+  const dlg = $('#jobDlg'), body = $('#jobDlgBody'), ap = $('#jobDlgApprove');
+  const names = j.people_names || [];
+  const n = j.card_count || names.length;
+  $('#jobDlgMeta').textContent = `${n} card${n === 1 ? '' : 's'}, ${j.sides === 'both' ? 'both sides' : 'personal side only'}`;
+  ap.hidden = j.status !== 'pending';
+  ap.onclick = async () => {
+    ap.disabled = true;
+    try {
+      await updateJob(j, { status: 'approved', approved_at: nowISO(), approved_by_email: state.email, error: null });
+      dlg.close(); toast('Approved. It will print shortly.');
+    } catch (err) { toast('Could not approve: ' + errMsg(err), 6000); }
+    finally { ap.disabled = false; }
+  };
+  $('#jobDlgClose').onclick = () => dlg.close();
+  body.innerHTML = '<p class="hint">Loading the cards...</p>';
+  dlg.showModal();
+  const items = [];
+  for (let i = 0; i < n; i++) items.push([`jobs/${j.id}/back-${i}.jpg`, names[i] || `Card ${i + 1}`]);
+  if (j.sides === 'both') items.push([`jobs/${j.id}/front.jpg`, 'Front (the same on every card)']);
+  const urls = await Promise.all(items.map(([pth]) => fileUrl(pth)));
+  body.innerHTML = '';
+  let shown = 0;
+  items.forEach(([, label], i) => {
+    if (!urls[i]) return;
+    const fig = document.createElement('figure');
+    fig.innerHTML = `<img alt="Card for ${esc(label)}" src="${esc(urls[i])}"><figcaption>${esc(label)}</figcaption>`;
+    body.appendChild(fig); shown++;
+  });
+  if (!shown) body.innerHTML = '<p class="hint">There is no preview for this job, because it was sent before previews were added. Use Download PDF to check it.</p>';
+}
 async function updateJob(j, patch) {
   const { error } = await sb.from('print_jobs').update(patch).eq('id', j.id);
   if (error) throw error;
@@ -767,11 +897,23 @@ async function sendToPrinter(list) {
   const both = $('#sides').value === 'both';
   toast('Preparing cards...', 0);
   try {
-    const blob = await buildPdf(list, both);
+    const previews = [];
+    const blob = await buildPdf(list, both, async c => { previews.push(await thumbBlob(c)); });
     const id = uuid();
     const path = `jobs/${id}.pdf`;
     const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
     if (up.error) throw up.error;
+    // Small pictures of each card so the job can be checked on a phone before approving
+    const uploads = previews.map((b, i) => [`jobs/${id}/back-${i}.jpg`, b]);
+    if (both) {
+      const fc = document.createElement('canvas'); fc.width = CARD_W; fc.height = CARD_H;
+      await drawFront(fc.getContext('2d'));
+      uploads.push([`jobs/${id}/front.jpg`, await thumbBlob(fc)]);
+    }
+    for (let i = 0; i < uploads.length; i += 6) {
+      await Promise.all(uploads.slice(i, i + 6).map(([pth, b]) =>
+        sb.storage.from(BUCKET).upload(pth, b, { contentType: 'image/jpeg', upsert: true }).catch(() => null)));
+    }
     const auto = !state.settings.requireApproval;
     const job = {
       id, people_names: list.map(p => p.name), card_count: list.length, sides: both ? 'both' : 'back', pdf_path: path,
@@ -803,12 +945,23 @@ function startEdit(p) {
 function resetForm() {
   state.editingId = null;
   $('#personForm').reset();
+  pendingPhoto = null; $('#fPhotoPreview').hidden = true;
   document.querySelectorAll('#fDan option.custom').forEach(o => o.remove());
   $('#formTitle').textContent = 'Add person';
   $('#submitBtn').textContent = 'Add person';
   $('#cancelEdit').hidden = true;
 }
 $('#cancelEdit').onclick = resetForm;
+let pendingPhoto = null;
+$('#fPhoto').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  pendingPhoto = null; $('#fPhotoPreview').hidden = true;
+  if (!f) return;
+  const blob = await cropPhoto(f);
+  if (!blob) { e.target.value = ''; return; }
+  pendingPhoto = blob;
+  const pv = $('#fPhotoPreview'); pv.src = URL.createObjectURL(blob); pv.hidden = false;
+});
 $('#personForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#submitBtn'); btn.disabled = true;
@@ -817,9 +970,8 @@ $('#personForm').addEventListener('submit', async e => {
     if (!data.name) return;
     const existing = state.people.find(p => p.id === state.editingId);
     const p = existing ? { ...existing, ...data } : { id: uuid(), photo: null, ...data };
-    const file = $('#fPhoto').files[0];
     let oldPhoto = null;
-    if (file) { oldPhoto = existing ? existing.photo : null; p.photo = await uploadFile('photos', await processPhoto(file), 'jpg', 'image/jpeg'); }
+    if (pendingPhoto) { oldPhoto = existing ? existing.photo : null; p.photo = await uploadFile('photos', pendingPhoto, 'jpg', 'image/jpeg'); }
     await putPerson(p);
     if (oldPhoto) await removeFile(oldPhoto);
     if (!existing) state.checked.add(p.id);
@@ -832,17 +984,19 @@ $('#personForm').addEventListener('submit', async e => {
 });
 
 /* ---------- Photos ---------- */
-async function setPhoto(p, file) {
+async function setPhoto(p, file, croppedBlob) {
   const old = p.photo;
-  const path = await uploadFile('photos', await processPhoto(file), 'jpg', 'image/jpeg');
+  const path = await uploadFile('photos', croppedBlob || await processPhoto(file), 'jpg', 'image/jpeg');
   await putPerson({ ...p, photo: path });
   await removeFile(old);
 }
 $('#hiddenPhoto').addEventListener('change', async e => {
   const file = e.target.files[0]; const p = state.people.find(x => x.id === photoTargetId);
   if (!file || !p) return;
+  const cropped = await cropPhoto(file);
+  if (!cropped) return;
   toast('Uploading photo...', 0);
-  try { await setPhoto(p, file); state.selectedId = p.id; renderPreview(); toast(`Photo saved for ${p.name}`); }
+  try { await setPhoto(p, file, cropped); state.selectedId = p.id; renderPreview(); toast(`Photo saved for ${p.name}`); }
   catch (err) { toast('The photo could not be uploaded: ' + errMsg(err), 6000); }
 });
 $('#bulkPhotoBtn').onclick = () => { $('#hiddenBulkPhotos').value = ''; $('#hiddenBulkPhotos').click(); };
