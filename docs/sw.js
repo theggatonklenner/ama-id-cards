@@ -3,7 +3,7 @@
 // Libraries and fonts never change at the same address, so they are kept once downloaded.
 // Supabase requests (member data) are never stored here.
 
-const CACHE = 'ama-cards-v1';
+const CACHE = 'ama-cards-v2';
 const SHELL = ['./', './index.html', './config.js', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 const LIB_HOSTS = /(^|\.)(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)$/;
 
@@ -46,4 +46,32 @@ self.addEventListener('fetch', e => {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => store(req, res))));
   }
   // Everything else (Supabase) goes straight to the network as normal
+});
+
+// ---------- Notifications ----------
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'AMA ID Cards', {
+    body: d.body || '',
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
+    tag: d.tag || undefined,
+    renotify: !!d.tag,
+    data: { url: d.url || './' }
+  }));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) {
+      if (c.url.startsWith(self.registration.scope)) {
+        c.postMessage({ open: 'queue' });
+        return c.focus();
+      }
+    }
+    return self.clients.openWindow(target);
+  }));
 });

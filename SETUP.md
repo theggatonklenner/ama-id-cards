@@ -68,6 +68,20 @@ If the back of the card prints upside down, open `config.json`, change `"duplexS
 
 Turn off **Jobs need approval before they print** if you want cards to print as soon as they are sent.
 
+## 6. Phone notifications (optional, about 5 minutes)
+
+Get a notification when cards need approval or a print fails.
+
+1. In Supabase, open **SQL Editor > New query**, paste the whole of `supabase/notifications.sql`, and click **Run**.
+2. Open **Edge Functions > Deploy a new function > Via Editor**. Name it `notify`, replace the example code with the whole of `supabase/functions/notify/index.ts`, and click **Deploy**.
+3. Open the new `notify` function's **Details** (or settings) and turn **off** "Enforce JWT verification" (also called "Verify JWT"). Save.
+4. On your phone:
+   - **iPhone:** open the site in Safari, tap **Share > Add to Home Screen**, then open AMA Cards from the Home Screen. (Apple only allows notifications for apps on the Home Screen.)
+   - **Android:** open the site in Chrome.
+5. In the app, go to **More > Notifications > Turn on notifications** and tap **Allow**. Then tap **Send a test**.
+
+Each person turns notifications on for their own phone. You're never notified about cards you sent yourself.
+
 ---
 
 ## Good to know

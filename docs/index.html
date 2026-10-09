@@ -348,29 +348,30 @@
     </details>
 
     <details class="group" id="notifyGroup">
-      <summary>Phone notifications</summary>
+      <summary>Notifications</summary>
       <div class="group-body">
-        <div id="notifySetupSql" hidden>
-          <p class="hint">One-time database update needed. In Supabase, open <strong>SQL Editor</strong>, paste this and click <strong>Run</strong>, then reload this page.</p>
-          <textarea id="notifySql" rows="4" readonly>alter table public.settings
-  add column if not exists notify_topic text,
-  add column if not exists notify_owner text,
-  add column if not exists notify_url text;</textarea>
-          <button class="btn" id="copySqlBtn">Copy</button>
-        </div>
-        <div id="notifyOff" hidden>
-          <p class="hint">Get a notification on your phone when cards need approval or a print fails. It uses the free ntfy app.</p>
-          <button class="btn primary" id="notifyOnBtn">Turn on notifications</button>
-        </div>
-        <div id="notifyOn" hidden class="view" style="gap:12px">
-          <p class="hint">Notifications go to <strong id="notifyOwner"></strong>. Jobs you send yourself don't notify you.</p>
-          <ol class="hint" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
-            <li>Install the free <strong>ntfy</strong> app from the App Store or Google Play.</li>
-            <li>In the app, tap <strong>+</strong> (Subscribe to topic) and enter this topic exactly:</li>
+        <p class="hint" id="pushLoading">Checking...</p>
+        <div id="pushIos" hidden class="view" style="gap:10px">
+          <p class="hint">On iPhone, notifications only work when the app is on your Home Screen.</p>
+          <ol class="hint" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+            <li>Tap the <strong>Share</strong> button in Safari.</li>
+            <li>Choose <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
+            <li>Open AMA Cards from your Home Screen and come back here.</li>
           </ol>
-          <div class="row"><input type="text" id="notifyTopic" readonly class="grow" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px"><button class="btn" id="copyTopicBtn">Copy</button></div>
-          <p class="hint">Keep the topic private. Notifications never include members' names or details.</p>
-          <div class="row"><button class="btn grow" id="notifyTestBtn">Send a test</button><button class="btn grow" id="notifyMeBtn">Send them to me</button><button class="btn danger grow" id="notifyOffBtn">Turn off</button></div>
+        </div>
+        <p class="hint" id="pushUnsupported" hidden>This browser can't show notifications. Try Chrome, Edge or Safari, or add the app to your Home Screen.</p>
+        <p class="hint" id="pushBlocked" hidden>Notifications are blocked for this app. Allow them in your phone or browser settings, then come back here.</p>
+        <p class="hint" id="pushSetup" hidden style="color:var(--warn)">Notifications aren't set up in the database yet. Follow "Phone notifications" in SETUP.md (one SQL file and one function to add in Supabase).</p>
+        <div id="pushOff" hidden class="view" style="gap:10px">
+          <p class="hint">Get a notification on this phone when cards need approval or a print fails.</p>
+          <button class="btn primary" id="pushOnBtn">Turn on notifications</button>
+        </div>
+        <div id="pushOn" hidden class="view" style="gap:12px">
+          <p class="hint">Notifications are on for this device.</p>
+          <label class="switch">Cards need approval <input type="checkbox" id="pushWantApprovals"></label>
+          <label class="switch">A print fails <input type="checkbox" id="pushWantFailures"></label>
+          <p class="hint">You won't be notified about cards you send yourself. Notifications never include members' details.</p>
+          <div class="row"><button class="btn grow" id="pushTestBtn">Send a test</button><button class="btn danger grow" id="pushOffBtn">Turn off</button></div>
         </div>
       </div>
     </details>
@@ -1312,9 +1313,6 @@ async function sendToPrinter(list) {
     });
     if (error) throw error;
     toast(auto ? 'Sent to the printer.' : 'Sent. Approve it in the Print queue.', 5000);
-    if (!auto && state.settings.notifyOwner !== state.email) {
-      notify('Cards need approval', `${list.length} card${list.length === 1 ? ' is' : 's are'} waiting for your approval.`, { tags: ['card_index'], priority: 4 });
-    }
     loadJobs();
     return true;
   } catch (err) {
@@ -1520,7 +1518,6 @@ function renderSettings() {
   const set = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v || ''; };
   set('#sIssued', state.settings.issuedDefault); set('#sCert', state.settings.certText); set('#sSign', state.settings.signText);
   $('#requireApproval').checked = !!state.settings.requireApproval;
-  renderNotify();
 }
 $('#sIssued').addEventListener('input', e => { state.settings.issuedDefault = e.target.value; saveSettingsSoon(); });
 $('#sCert').addEventListener('input', e => { state.settings.certText = e.target.value; saveSettingsSoon(); });
@@ -1550,55 +1547,89 @@ $('#frontBtn').onclick = () => { $('#hiddenFront').value = ''; $('#hiddenFront')
 $('#hiddenFront').addEventListener('change', e => { const f = e.target.files[0]; if (f) replaceSettingImage('front', f, CARD_W * 1.5, 'image/jpeg', 'jpg'); });
 $('#frontReset').onclick = () => clearSettingImage('front');
 
-/* ---------- Phone notifications (ntfy app) ---------- */
-const NTFY = 'https://ntfy.sh/';
-function siteUrl() { return location.origin + location.pathname.replace(/index\.html$/, ''); }
-async function notify(title, message, opts = {}) {
-  const S = state.settings;
-  if (!S.notifyTopic) return;
+/* ---------- Notifications (web push from the app) ---------- */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const fnUrl = () => (window.AMA_CONFIG.SUPABASE_URL || '').replace(/\/$/, '') + '/functions/v1/notify';
+function b64uToBytes(str) {
+  const s = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(s + '='.repeat((4 - (s.length % 4)) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+function swReady(ms = 4000) {
+  return Promise.race([navigator.serviceWorker.ready, new Promise((_, rej) => setTimeout(() => rej(new Error('The app is still installing. Reload and try again.')), ms))]);
+}
+let pushRow = null;
+async function currentPushSub() {
+  try { return await (await swReady()).pushManager.getSubscription(); } catch { return null; }
+}
+function showPush(which) {
+  ['pushLoading', 'pushIos', 'pushUnsupported', 'pushBlocked', 'pushSetup', 'pushOff', 'pushOn'].forEach(id => { $('#' + id).hidden = id !== which; });
+}
+async function renderPush() {
+  if (!pushSupported()) return showPush(isIOS && !isStandalone() ? 'pushIos' : 'pushUnsupported');
+  if (Notification.permission === 'denied') return showPush('pushBlocked');
+  const sub = Notification.permission === 'granted' ? await currentPushSub() : null;
+  if (!sub) return showPush('pushOff');
+  const { data } = await sb.from('push_subscriptions').select('*').eq('endpoint', sub.endpoint).maybeSingle();
+  if (!data) return showPush('pushOff');
+  pushRow = data;
+  $('#pushWantApprovals').checked = !!data.wants_approvals;
+  $('#pushWantFailures').checked = !!data.wants_failures;
+  showPush('pushOn');
+}
+$('#notifyGroup').addEventListener('toggle', e => { if (e.target.open) renderPush(); });
+$('#pushOnBtn').onclick = async () => {
+  const btn = $('#pushOnBtn'); btn.disabled = true;
   try {
-    // A plain-text JSON body keeps this a simple request the browser sends without a preflight
-    await fetch(NTFY, { method: 'POST', body: JSON.stringify({
-      topic: S.notifyTopic, title, message, tags: opts.tags || ['card_index'], priority: opts.priority || 3, click: S.notifyUrl || siteUrl()
-    }) });
-  } catch (e) { console.warn('Notification not sent', e); }
-}
-function renderNotify() {
-  const S = state.settings, cols = state.hasNotifyCols;
-  $('#notifySetupSql').hidden = cols;
-  $('#notifyOff').hidden = !cols || !!S.notifyTopic;
-  $('#notifyOn').hidden = !cols || !S.notifyTopic;
-  if (S.notifyTopic) {
-    $('#notifyTopic').value = S.notifyTopic;
-    $('#notifyOwner').textContent = S.notifyOwner || 'everyone';
-    $('#notifyMeBtn').hidden = S.notifyOwner === state.email;
-  }
-}
-function randomTopic() {
-  const a = new Uint8Array(12); crypto.getRandomValues(a);
-  return 'ama-cards-' + [...a].map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
-}
-async function copyText(text, btn) {
-  try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
-  catch { toast('Press and hold to copy.'); }
-}
-$('#copySqlBtn').onclick = e => copyText($('#notifySql').value, e.target);
-$('#copyTopicBtn').onclick = e => copyText($('#notifyTopic').value, e.target);
-$('#notifyOnBtn').onclick = async () => {
-  Object.assign(state.settings, { notifyTopic: randomTopic(), notifyOwner: state.email, notifyUrl: siteUrl() });
-  await saveSettingsNow(); renderNotify();
-  toast('Notifications are on. Subscribe to the topic in the ntfy app.', 5000);
+    const perm = await Notification.requestPermission();   // must come first, straight from the tap
+    if (perm !== 'granted') { await renderPush(); return; }
+    const { data: key, error } = await sb.rpc('vapid_public_key');
+    if (error) { showPush('pushSetup'); return; }
+    let publicKey = key;
+    if (!publicKey) {
+      const res = await fetch(fnUrl() + '?init');
+      if (!res.ok) { showPush('pushSetup'); return; }
+      publicKey = (await res.json()).publicKey;
+    }
+    const reg = await swReady();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(publicKey) });
+    const j = sub.toJSON();
+    const { error: e2 } = await sb.from('push_subscriptions').upsert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
+    if (e2) throw e2;
+    if (state.hasNotifyCols && state.settings.notifyTopic) { state.settings.notifyTopic = null; saveSettingsNow(); } // retire the old ntfy setup
+    await renderPush();
+    toast('Notifications are on.');
+  } catch (err) { toast('Could not turn on notifications: ' + errMsg(err), 7000); }
+  finally { btn.disabled = false; }
 };
-$('#notifyMeBtn').onclick = async () => { state.settings.notifyOwner = state.email; state.settings.notifyUrl = siteUrl(); await saveSettingsNow(); renderNotify(); };
-$('#notifyOffBtn').onclick = async () => {
-  if (!await ask('Turn off phone notifications?', 'Turn off')) return;
-  Object.assign(state.settings, { notifyTopic: null, notifyOwner: null });
-  await saveSettingsNow(); renderNotify();
+async function savePushPrefs() {
+  if (!pushRow) return;
+  const { error } = await sb.from('push_subscriptions')
+    .update({ wants_approvals: $('#pushWantApprovals').checked, wants_failures: $('#pushWantFailures').checked })
+    .eq('endpoint', pushRow.endpoint);
+  if (error) toast('Could not save: ' + errMsg(error), 6000);
+}
+$('#pushWantApprovals').addEventListener('change', savePushPrefs);
+$('#pushWantFailures').addEventListener('change', savePushPrefs);
+$('#pushTestBtn').onclick = async () => {
+  try {
+    const { data } = await sb.auth.getSession();
+    const res = await fetch(fnUrl() + '?test', { method: 'POST', headers: { Authorization: 'Bearer ' + (data.session && data.session.access_token) } });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || 'The notify function did not answer.');
+    toast(out.sent ? 'Test sent. It should arrive in a few seconds.' : 'No devices found. Turn notifications off and on again.', 5000);
+  } catch (err) { toast('Test failed: ' + errMsg(err), 7000); }
 };
-$('#notifyTestBtn').onclick = async () => {
-  await notify('AMA ID Cards', 'Test notification. Notifications are working.', { tags: ['white_check_mark'] });
-  toast('Test sent. It should arrive on your phone in a few seconds.');
+$('#pushOffBtn').onclick = async () => {
+  const sub = await currentPushSub();
+  if (sub) { await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); await sub.unsubscribe().catch(() => {}); }
+  pushRow = null; await renderPush(); toast('Notifications are off for this device.');
 };
+// A tapped notification asks the app to show the print queue
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.open === 'queue' && state.started) showTab('queue'); });
 
 /* ---------- Backup / restore ---------- */
 async function pathToDataURL(path) {
@@ -1670,7 +1701,9 @@ async function startApp(session) {
   state.email = session.user.email || '';
   $('#whoAmI').textContent = state.email;
   showView('app');
-  showTab(['people', 'queue', 'add', 'more'].includes(store.get('amaTab')) ? store.get('amaTab') : 'people');
+  const fromLink = location.hash === '#queue' ? 'queue' : null;
+  if (fromLink) history.replaceState(null, '', location.pathname);
+  showTab(fromLink || (['people', 'queue', 'add', 'more'].includes(store.get('amaTab')) ? store.get('amaTab') : 'people'));
   renderList();
   await Promise.all([loadSettings(), loadPeople(), loadJobs(), loadStation()]);
   const reloadPeople = debounce(loadPeople, 400), reloadJobs = debounce(loadJobs, 300);
