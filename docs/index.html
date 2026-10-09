@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#0e5f97">
+<meta name="theme-color" content="#04794b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="AMA Cards">
@@ -21,17 +21,20 @@
 <style>
   /* Layout: tools column on the left; people, printing and the two-sided card preview on the right. Stacks on phones. */
   :root {
-    --bg: #f2f5f8; --surface: #ffffff; --fg: #14202b; --muted: #5b6b7a; --line: #d9e1e9;
-    --accent: #0e5f97; --on-accent: #ffffff; --gold: #9c8550; --danger: #b3261e; --ok: #1d7a46; --warn: #a35d00;
-    --hover: #e9f1f8;
+    /* AMA academy logo colours: green ring, yellow, navy */
+    --bg: #f3f6f4; --surface: #ffffff; --fg: #16211b; --muted: #5a6b61; --line: #d7e2db;
+    --accent: #04794b; --on-accent: #ffffff; --gold: #f2d500; --on-gold: #1d1d1d; --info: #3a4181;
+    --danger: #b3261e; --ok: #04794b; --warn: #a35d00;
+    --hover: #e6f2ec;
     --font-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
     --font-body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1720; --surface: #17222d; --fg: #e6edf3; --muted: #93a3b3; --line: #2a3846;
-      --accent: #5aa9e0; --on-accent: #0b1a26; --gold: #c9b07a; --danger: #f2867d; --ok: #5cc98a; --warn: #f0b45a; --hover: #1d2c3a;
+      --bg: #0e1612; --surface: #16211b; --fg: #e6efe9; --muted: #93a79b; --line: #2a3a31;
+      --accent: #3fbf7f; --on-accent: #06150d; --gold: #e8d23a; --on-gold: #1d1d1d; --info: #9aa3ea;
+      --danger: #f2867d; --ok: #5cd394; --warn: #f0b45a; --hover: #1c2b23;
       color-scheme: dark;
     }
   }
@@ -49,7 +52,7 @@
   .pill[data-kind="ok"] { color: var(--ok); border-color: var(--ok); }
   .pill[data-kind="warn"] { color: var(--warn); border-color: var(--warn); }
   .pill[data-kind="bad"] { color: var(--danger); border-color: var(--danger); }
-  .pill[data-kind="info"] { color: var(--accent); border-color: var(--accent); }
+  .pill[data-kind="info"] { color: var(--info); border-color: var(--info); }
   main { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start; }
   @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
   .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
@@ -64,6 +67,7 @@
   textarea { resize: vertical; line-height: 1.4; }
   input[type=file] { font: inherit; font-size: 13px; color: var(--muted); max-width: 100%; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=checkbox] { accent-color: var(--accent); }
   button { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; white-space: nowrap; }
   button:hover { background: var(--hover); }
   button:disabled { opacity: .5; cursor: default; }
@@ -85,7 +89,7 @@
   #rows tr { cursor: pointer; }
   #rows tr:hover td { background: var(--hover); }
   tr.active td { background: var(--hover); box-shadow: inset 0 -2px 0 var(--accent); }
-  .dan { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--gold); color: var(--surface); white-space: nowrap; }
+  .dan { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--gold); color: var(--on-gold); white-space: nowrap; }
   .thumb { width: 36px; height: 48px; object-fit: cover; border-radius: 4px; display: block; background: var(--hover); }
   .nophoto { width: 36px; height: 48px; border-radius: 4px; border: 1px dashed var(--muted); font-size: 9px; color: var(--muted); display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; }
   .actions { display: flex; gap: 6px; flex-wrap: nowrap; }
