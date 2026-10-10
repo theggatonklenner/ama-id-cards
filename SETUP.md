@@ -102,6 +102,13 @@ There is always at least one Admin; the app won't let the last one be removed or
 
 ---
 
+## 8. Hide people once they are printed
+
+1. In Supabase, open **SQL Editor > New query**, paste the whole of `supabase/printed.sql`, and click **Run**.
+2. Reopen the app. People now has **To print / Printed / All** above the list.
+
+When the print station finishes a job, everyone on it moves to **Printed**. If you change someone's name, date of birth, dan, issued date or photo afterwards, they move back to **To print**. You can also mark people by hand from their page or with **Select**.
+
 ## Good to know
 
 - **The printer must be on with blank cards loaded, and the laptop awake.** Set the laptop to never sleep while plugged in (Windows Settings > System > Power). Jobs sent while the laptop is off wait and print once it is back on.
