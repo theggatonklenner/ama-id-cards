@@ -82,10 +82,33 @@ Get a notification when cards need approval or a print fails.
 
 Each person turns notifications on for their own phone. You're never notified about cards you sent yourself.
 
-## 7. User roles
+## 7. User permissions
 
-| Role | Can do |
+Each person gets tick-box permissions, the same way as Black Belt Prep. Tick any mix:
+
+| Permission | Can do |
 |---|---|
+| Admin | Everything, including card design, settings, backups and users |
+| Edit people | Add people, edit details, take photos, import, mark as printed |
+| Delete people | Delete people |
+| Send to print | Send cards to the printer |
+| Approve prints | Approve, cancel and retry print jobs |
+| View only | Look at people and the print queue |
+| Print station | Only for the laptop's print station login |
+
+With no ticks, a person can't use the app. If jobs need approval, someone with **Send to print** but not **Approve prints** sends jobs that wait for an approver.
+
+1. In Supabase, open **SQL Editor > New query**, paste the whole of `supabase/roles.sql`, and click **Run** (skip if you've done it before).
+2. Then paste the whole of `supabase/permissions.sql` and click **Run**. Everyone keeps what they could do before: Admin stays Admin; Approver gets Edit, Delete, Send and Approve; Photos gets Edit people; Viewer gets View only; Print station stays Print station.
+3. Update the `notify` Edge Function with the latest `supabase/functions/notify/index.ts` (it adds and removes logins, and sends approval alerts to people who can approve).
+4. In the app, go to **More > Users**. Tap someone to change their ticks or remove them, or **Add user** with their email, a starting password and their ticks.
+   You can still add logins in Supabase (**Authentication > Users > Add user**, tick **Auto Confirm User**). They appear in More > Users automatically with what's chosen under "New logins created in Supabase get" (No access unless you change it).
+
+There is always at least one Admin; the app won't let the last one be removed.
+
+You can also manage logins for both apps in one place at https://theggatonklenner.github.io/staff/ (Staff logins).
+
+---|---|
 | Admin | Everything, including card design, backups and managing users |
 | Approver | Add, edit and delete people, take photos, send and approve prints |
 | Photos | Add people, edit their details and take photos |

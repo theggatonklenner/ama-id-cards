@@ -120,7 +120,21 @@ async function sendTo(subs, message, cfg) {
 }
 
 // ---- Admins adding and removing logins ----
+// Tick-box permissions (supabase/permissions.sql); older databases still use one role per person.
+const PERMS = ['admin', 'edit', 'delete', 'send', 'approve', 'viewer', 'printer'];
 const ROLES = ['admin', 'approver', 'photos', 'viewer', 'printer'];
+async function usesPermissions() {
+  const { error } = await db.from('staff_permissions').select('email').limit(1);
+  return !error;
+}
+async function isAdmin(email) {
+  if (await usesPermissions()) {
+    const { data } = await db.from('staff_permissions').select('permission').eq('email', email).eq('permission', 'admin').maybeSingle();
+    return !!data;
+  }
+  const { data } = await db.from('staff_roles').select('role').eq('email', email).maybeSingle();
+  return !!data && data.role === 'admin';
+}
 async function callerEmail(req) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) return null;
@@ -140,14 +154,14 @@ async function findUserByEmail(email) {
 async function manageUsers(req) {
   const me = await callerEmail(req);
   if (!me) return json({ error: 'Sign in first.' }, 401);
-  const { data: mine } = await db.from('staff_roles').select('role').eq('email', me).maybeSingle();
-  if (!mine || mine.role !== 'admin') return json({ error: 'Only admins can manage users.' }, 403);
+  if (!(await isAdmin(me))) return json({ error: 'Only admins can manage users.' }, 403);
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
 
   if (body.action === 'create') {
     const role = ROLES.includes(body.role) ? body.role : 'viewer';
+    const perms = Array.isArray(body.permissions) ? [...new Set(body.permissions.filter(p => PERMS.includes(p)))] : null;
     const password = String(body.password || '');
     const existing = await findUserByEmail(email);
     if (!existing) {
@@ -158,15 +172,34 @@ async function manageUsers(req) {
       const { error } = await db.auth.admin.updateUserById(existing.id, { password });
       if (error) return json({ error: error.message }, 400);
     }
-    const { error: e2 } = await db.from('staff_roles').upsert({ email, role });
-    if (e2) return json({ error: e2.message }, 400);
+    if (await usesPermissions()) {
+      // Set exactly the ticked permissions (add first, then remove, so an admin is never lost half way)
+      const want = perms || [];
+      if (want.length) {
+        const { error } = await db.from('staff_permissions').upsert(want.map(permission => ({ email, permission })), { onConflict: 'email,permission', ignoreDuplicates: true });
+        if (error) return json({ error: error.message }, 400);
+      }
+      const { data: have } = await db.from('staff_permissions').select('permission').eq('email', email);
+      const drop = (have || []).map(r => r.permission).filter(p => !want.includes(p));
+      if (drop.length) {
+        const { error } = await db.from('staff_permissions').delete().eq('email', email).in('permission', drop);
+        if (error) return json({ error: /admin/i.test(error.message) ? 'There must always be at least one admin.' : error.message }, 400);
+      }
+    } else {
+      const { error: e2 } = await db.from('staff_roles').upsert({ email, role });
+      if (e2) return json({ error: e2.message }, 400);
+    }
     return json({ ok: true, existed: !!existing });
   }
 
   if (body.action === 'remove') {
     if (email === me) return json({ error: "You can't remove yourself." }, 400);
+    if (await usesPermissions()) {
+      const { error: e0 } = await db.from('staff_permissions').delete().eq('email', email);
+      if (e0) return json({ error: /admin/i.test(e0.message) ? 'There must always be at least one admin.' : e0.message }, 400);
+    }
     const { error: e1 } = await db.from('staff_roles').delete().eq('email', email);
-    if (e1) return json({ error: e1.message }, 400);
+    if (e1 && !/admin/i.test(e1.message)) return json({ error: e1.message }, 400);
     const user = await findUserByEmail(email);
     if (user) {
       await db.from('push_subscriptions').delete().eq('user_email', email);
@@ -227,11 +260,14 @@ Deno.serve(async req => {
     subs = (subs || []).filter(s => !(kind === 'approval' && s.user_email && s.user_email === job.created_by_email));
     // Printer and approval alerts only go to people who can act on them
     if (kind !== 'printed') {
-      const { data: roles, error: rolesErr } = await db.from('staff_roles').select('email, role');
-      if (!rolesErr && roles) {
-        const canPrint = new Set(roles.filter(r => r.role === 'admin' || r.role === 'approver').map(r => r.email));
-        subs = subs.filter(s => canPrint.has(String(s.user_email || '').toLowerCase()));
+      let canPrint = null;
+      const { data: perms, error: permErr } = await db.from('staff_permissions').select('email, permission').in('permission', ['admin', 'approve']);
+      if (!permErr && perms) canPrint = new Set(perms.map(r => r.email));
+      else {
+        const { data: roles, error: rolesErr } = await db.from('staff_roles').select('email, role');
+        if (!rolesErr && roles) canPrint = new Set(roles.filter(r => r.role === 'admin' || r.role === 'approver').map(r => r.email));
       }
+      if (canPrint) subs = subs.filter(s => canPrint.has(String(s.user_email || '').toLowerCase()));
     }
     const sent = await sendTo(subs, message, cfg);
     return json({ sent });
