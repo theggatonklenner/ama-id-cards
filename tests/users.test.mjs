@@ -83,6 +83,7 @@ try {
   await db.exec(read(join(here, '../supabase/permissions.sql')));
   console.log('\nAfter permissions.sql');
   ({ ctx, page } = await open('owner@ama.test'));
+  ok(await page.isVisible('#homeBtn') && (await page.getAttribute('#homeBtn', 'href')) === 'https://theggatonklenner.github.io/', 'home button goes back to the AMA Grading Toolkit');
   await openUsers(page);
   await page.waitForSelector('#usersList [data-user="appr@ama.test"]');
   const list = await page.textContent('#usersList');
