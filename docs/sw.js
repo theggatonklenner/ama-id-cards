@@ -3,8 +3,8 @@
 // Libraries and fonts never change at the same address, so they are kept once downloaded.
 // Supabase requests (member data) are never stored here.
 
-const CACHE = 'ama-cards-v6';
-const SHELL = ['./', './index.html', './config.js', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
+const CACHE = 'ama-cards-v7';
+const SHELL = ['./', './index.html', './config.js', './hub-signin.js', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 const LIB_HOSTS = /(^|\.)(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)$/;
 
 self.addEventListener('install', e => {
