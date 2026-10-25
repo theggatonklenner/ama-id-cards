@@ -2288,11 +2288,12 @@ async function startApp(session) {
   if (state.started) return;
   state.started = true;
   state.email = session.user.email || '';
-  $('#whoAmI').textContent = state.email;
+  const myName = (session.user.user_metadata || {}).full_name || state.email;   // hub sign-in logins have a stand-in email
+  $('#whoAmI').textContent = myName;
   $('#appVersion').textContent = APP_VERSION;
   await loadMyRole();
   if (!canUseApp()) {
-    $('#noAccessEmail').textContent = state.email;
+    $('#noAccessEmail').textContent = myName;
     showView('noaccess');
     return;
   }
