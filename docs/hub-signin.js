@@ -8,10 +8,11 @@
 // The "hub" Supabase function checks the mobile and PIN with the hub and returns an ordinary Supabase session
 // for the AMA Toolkit login linked to that mobile, so each app's permissions work as before.
 (function () {
-  var KEY = 'ama_hub_token';
+  var KEY = 'ama_hub_token', CHECKED = 'ama_hub_checked', EVERY = 60 * 60 * 1000;   // ask the hub at most once an hour
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) { return null; } }
   var store = {
-    get: function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
-    set: function (v) { try { if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY); } catch (e) { /* private mode */ } }
+    get: function () { return ls(KEY); },
+    set: function (v) { ls(KEY, v || null); ls(CHECKED, v ? String(Date.now()) : null); }
   };
   function call(o, body) {
     return fetch(String(o.url).replace(/\/$/, '') + '/functions/v1/hub', {
@@ -57,7 +58,7 @@
     wrap.querySelector('#hubBack').onclick = function () { mode(false); };
     hubForm.onsubmit = function (e) {
       e.preventDefault();
-      go.disabled = true; err.style.display = 'none';
+      go.disabled = true; go.textContent = 'Signing in…'; err.style.display = 'none';
       call(o, { mobile: wrap.querySelector('#hubMobile').value, pin: wrap.querySelector('#hubPin').value }).then(function (r) {
         if (!r || !r.ok) throw new Error((r && r.error) || 'Mobile or PIN not right.');
         return o.sb.auth.setSession(r.session).then(function (s) {
@@ -67,7 +68,7 @@
         });
       }).catch(function (e2) {
         err.textContent = (e2 && e2.message) || 'Could not sign in. Try again.';
-        err.style.display = ''; go.disabled = false;
+        err.style.display = ''; go.disabled = false; go.textContent = 'Sign in';
       });
     };
   }
@@ -76,6 +77,7 @@
     watchSignOut(o.sb);
     var token = store.get();
     if (!token) return Promise.resolve(true);
+    if (Date.now() - Number(ls(CHECKED) || 0) < EVERY) return Promise.resolve(true);   // checked recently
     return o.sb.auth.getSession().then(function (res) {
       if (!res.data.session) { store.set(null); return true; }
       return call(o, { check: token }).then(function (r) {
@@ -83,6 +85,7 @@
           store.set(null);
           return o.sb.auth.signOut().then(function () { location.reload(); return false; });
         }
+        if (r && r.ok) ls(CHECKED, String(Date.now()));
         return true;
       });
     }).catch(function () { return true; });
