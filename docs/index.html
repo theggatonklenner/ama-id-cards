@@ -2139,7 +2139,7 @@ $('#hiddenRestore').addEventListener('change', async e => {
 });
 
 /* ---------- Permissions ---------- */
-// Tick-box permissions, like Black Belt Prep. Admin counts as all of them.
+// Tick-box permissions, like Black Belt Gradings. Admin counts as all of them.
 const PERMS = {
   admin:   ['Admin', 'Everything, including card design, settings, backups and users'],
   edit:    ['Edit people', 'Add people, edit details, take photos, import'],
@@ -2198,7 +2198,7 @@ function openUser(email = '') {
   const current = email ? (usersCache[email] || []) : ['edit'];
   const me = email && email === state.email.toLowerCase();
   $('#userDlgTitle').textContent = email ? 'User permissions' : 'Add user';
-  $('#userDlgMeta').textContent = email || 'They get a login for AMA ID Cards. Black Belt Prep access is set in that app.';
+  $('#userDlgMeta').textContent = email || 'They get a login for AMA ID Cards. Black Belt Gradings access is set in that app.';
   $('#uEmailRow').hidden = !!email; $('#uEmail').required = !email; $('#uEmail').value = '';
   $('#uPasswordRow').hidden = !!email; $('#uPassword').value = '';
   $('#permList').innerHTML = Object.entries(PERMS).map(([k, [n, d]]) => `<label class="perm"><input type="checkbox" value="${k}"${current.includes(k) ? ' checked' : ''}><span><b>${esc(n)}</b><span>${esc(d)}</span></span></label>`).join('');
