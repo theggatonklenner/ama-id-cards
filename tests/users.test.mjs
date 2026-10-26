@@ -89,6 +89,8 @@ try {
   const list = await page.textContent('#usersList');
   ok(list.includes('Edit people, Delete people, Send to print, Approve prints') && list.includes('owner@ama.test') && list.includes('Admin') && list.includes('Print station'), 'Users lists everyone with their ticked permissions, like Prep');
   await page.screenshot({ path: join(SHOTS, 'cards-users.png') });
+  if (process.env.SHOT_DIR) for (const v of ['people', 'queue', 'add', 'more']) { await page.click(`.tab[data-view="${v}"]`); await page.waitForTimeout(300); await page.screenshot({ path: join(SHOTS, `cards-tab-${v}.png`), fullPage: true }); }
+  if (process.env.SHOT_DIR) await page.click(`.tab[data-view="more"]`);
 
   // Change ticks: sender gets Send but not Approve
   await page.click('#usersList [data-user="sender@ama.test"]'); await page.waitForSelector('#userDlg[open]');

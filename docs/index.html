@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#04794b">
+<meta name="theme-color" content="#0f1713">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="AMA Cards">
@@ -14,34 +14,21 @@
 <title>AMA ID Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&family=Carlito:wght@700&family=Barlow+Semi+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;700&family=Carlito:wght@700&family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="hub-signin.js"></script>
 <style>
-  /* Layout: an app shell. Header with status, one view at a time, tab bar at the bottom on phones
-     and under the header on wide screens. Colours from the AMA academy logo. */
+  /* Same look as AMA Gradings: pine black, gold for the one thing to press, green for done */
   :root {
-    --bg: #f3f6f4; --surface: #ffffff; --fg: #16211b; --muted: #5a6b61; --line: #dfe7e2;
-    --accent: #04794b; --on-accent: #ffffff; --accent-soft: #e3f2ea;
-    --gold: #f2d500; --on-gold: #1d1d1d; --info: #3a4181;
-    --danger: #b3261e; --ok: #04794b; --warn: #8a4f00; --hover: #eef5f1;
-    --shadow: 0 1px 2px rgba(16,33,27,.06), 0 4px 14px rgba(16,33,27,.06);
+    --bg: #0f1713; --surface: #15201a; --raise: #1b2821; --fg: #edf2ee; --muted: #a3b5a9; --faint: #74897b; --line: #253629; --line2: #31473a;
+    --accent: #f5c518; --on-accent: #14130a; --accent-soft: rgba(245,197,24,.12); --gold: #f5c518; --on-gold: #14130a;
+    --ok: #7fd6a2; --danger: #ef8a73; --warn: #f0b45a; --hover: #1b2821;
+    --shadow: 0 0 0 1px var(--line); --tabbar-h: 64px; --info: #a3b5a9;
     --font-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
-    --font-body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
-    --tabbar-h: 64px;
-    color-scheme: light;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1612; --surface: #16211b; --fg: #e6efe9; --muted: #93a79b; --line: #26352c;
-      --accent: #3fbf7f; --on-accent: #06150d; --accent-soft: #1b3326;
-      --gold: #e8d23a; --on-gold: #1d1d1d; --info: #9aa3ea;
-      --danger: #f2867d; --ok: #5cd394; --warn: #f0b45a; --hover: #1c2b23;
-      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
-      color-scheme: dark;
-    }
+    --font-body: Barlow, "Segoe UI", Arial, sans-serif;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
@@ -103,7 +90,7 @@
   textarea { resize: vertical; line-height: 1.4; min-height: 0; }
   input[type=search] { background: var(--surface); }
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border-radius: 10px;
-    border: 1px solid var(--line); background: var(--surface); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+    border: 1px solid var(--line2); background: var(--surface); font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap; text-decoration: none; }
   .btn:hover { background: var(--hover); }
   .btn:disabled { opacity: .5; cursor: default; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
@@ -275,7 +262,26 @@
   .paste-preview .nm { flex: 1 1 40%; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .paste-preview .skip { opacity: .5; }
   .paste-preview .skip .nm { text-decoration: line-through; }
-  .paste-preview .warn { color: #b3261e; flex-basis: 100%; }
+  .paste-preview .warn { color: var(--danger); flex-basis: 100%; }
+  /* Same look as AMA Gradings */
+  body { line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  input[type=checkbox] { accent-color: var(--gold); }
+  .appbar, .tabbar { background: rgba(15,23,19,.96); }
+  .card, .people, .job, .group { border-radius: 14px; }
+  input[type=text], input[type=email], input[type=password], input[type=date], input[type=search], input[type=number], input[type=tel], input[type=url], textarea, select { background: var(--raise) !important; border-color: var(--line2) !important; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--gold) !important; }
+  .btn { background: none; border-color: var(--line2); }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--gold); border-color: var(--gold); color: var(--on-gold); font-weight: 700; }
+  .seg { background: var(--bg); }
+  .seg button[aria-pressed="true"] { background: var(--raise); box-shadow: inset 0 0 0 1px var(--line2); }
+  .tag { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 0; border-radius: 0; font-size: 13px; color: var(--muted); }
+  .tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .tag.ok { color: var(--ok); } .tag.warn { color: var(--warn); } .tag.muted { color: var(--muted); }
+  .role-tag { background: none; color: var(--gold); padding: 0; }
+  dialog { border: 1px solid var(--line2); box-shadow: 0 10px 50px rgba(0,0,0,.6); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  #swipeTipOk { white-space: nowrap; flex: none; }
 </style>
 </head>
 <body>
